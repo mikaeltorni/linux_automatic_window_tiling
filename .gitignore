@@ -1,0 +1,4 @@
+.log/
+schemas/gschemas.compiled
+tests/__pycache__/
+.pytest_cache/

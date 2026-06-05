@@ -1,0 +1,8 @@
+{
+  "uuid": "automatic-window-tiling@local",
+  "name": "Automatic Window Tiling",
+  "description": "Tile matching application windows on the current workspace and monitor",
+  "settings-schema": "org.gnome.shell.extensions.automatic-window-tiling",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "version": 1
+}

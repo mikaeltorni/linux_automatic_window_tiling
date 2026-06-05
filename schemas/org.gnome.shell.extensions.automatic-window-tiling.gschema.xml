@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.automatic-window-tiling" path="/org/gnome/shell/extensions/automatic-window-tiling/">
+    <key name="tile-focused-application-windows" type="as">
+      <default>[]</default>
+      <summary>Tile focused application windows on the current workspace and monitor</summary>
+    </key>
+  </schema>
+</schemalist>

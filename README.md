@@ -1,3 +1,75 @@
+# Linux Automatic Window Tiling
+
+GNOME Shell extension that tiles windows matching the focused application on
+the focused window's current workspace and monitor.
+
+The installer accepts the desired GNOME accelerator, so the tiling action can
+be bound without editing the extension source.
+
+## Behavior
+
+- Only normal, taskbar-visible windows are tiled.
+- Windows must match the focused application's concrete identity.
+- Windows must already be on the focused window's workspace and monitor.
+- One window fills the monitor work area.
+- Two windows stack top/bottom on landscape monitors and left/right on portrait
+  monitors.
+- Four windows use a 2x2 grid.
+- Other counts use a balanced calculated grid.
+- GNOME's work area is used, excluding panels and docks.
+
+## Installation
+
+Pass a GNOME accelerator as the first argument:
+
+```bash
+bash install.sh '<Super>t'
+```
+
+Long-form syntax is also supported:
+
+```bash
+bash install.sh --binding '<Control><Alt>t'
+```
+
+The installer can run directly as the desktop user or through `sudo`. When run
+through `sudo`, it uses `SUDO_USER` to install into that user's local GNOME
+Shell extension directory and apply the binding through the user's session
+bus.
+
+Log out and back in after installation when GNOME Shell cannot reload the
+extension in the current session. On X11, restarting GNOME Shell also loads the
+new version.
+
+## Development
+
+Run tests and syntax checks:
+
+```bash
+python3 -m pytest tests -q
+bash -n install.sh
+```
+
+Validate the schema:
+
+```bash
+glib-compile-schemas --strict schemas
+```
+
+The compiled `schemas/gschemas.compiled` file is generated and ignored.
+
+## Integration
+
+`linux_hotkey_setup` detects this repository as a sibling checkout and invokes:
+
+```bash
+bash ../linux_automatic_window_tiling/install.sh '<Super>t'
+```
+
+The master `installation_scripts` repository clones this project before
+`linux_hotkey_setup`, while installation is delegated to the hotkey setup so
+the binding remains explicitly owned there.
+
 ## Disclaimer
 
 This software is provided under the MIT License on an **“as is”** basis, without warranties of any kind. To the maximum extent permitted by applicable law, the authors and copyright holders shall not be liable for any claims, damages, losses, or other liability arising from the use of this software.
