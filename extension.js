@@ -75,9 +75,7 @@ function chooseGrid(windowCount, workArea) {
     return { rows: 1, columns: 1 };
   }
   if (windowCount === 2) {
-    return workArea.width >= workArea.height
-      ? { rows: 2, columns: 1 }
-      : { rows: 1, columns: 2 };
+    return { rows: 1, columns: 2 };
   }
 
   let best = null;

@@ -12,7 +12,9 @@ def test_extension_filters_by_application_workspace_and_monitor():
     assert "win.get_monitor() !== monitorIndex" in source
     assert "workspace.get_work_area_for_monitor(monitorIndex)" in source
     assert "win.move_resize_frame(true, x1, y1, x2 - x1, y2 - y1)" in source
-    assert "workArea.width >= workArea.height" in source
+    assert "if (windowCount === 2)" in source
+    assert "return { rows: 1, columns: 2 };" in source
+    assert "workArea.width >= workArea.height" not in source
 
 
 def test_schema_has_no_hard_coded_binding():

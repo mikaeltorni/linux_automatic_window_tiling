@@ -12,8 +12,7 @@ be bound without editing the extension source.
 - Windows must match the focused application's concrete identity.
 - Windows must already be on the focused window's workspace and monitor.
 - One window fills the monitor work area.
-- Two windows stack top/bottom on landscape monitors and left/right on portrait
-  monitors.
+- Two windows tile left/right.
 - Four windows use a 2x2 grid.
 - Other counts use a balanced calculated grid.
 - GNOME's work area is used, excluding panels and docks.
