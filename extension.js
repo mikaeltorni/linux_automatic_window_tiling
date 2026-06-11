@@ -5,6 +5,31 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const TILE_KEY = 'tile-focused-application-windows';
 
+// Optional per-application tile size limits. Each entry maps a window
+// application identifier (see getWindowApplicationId) to an upper bound, in
+// physical pixels, for a tiled window's width and/or height. A null bound
+// leaves that dimension unconstrained. Matching is done on the identifier
+// suffix so any identity source (wm-class, gtk-application-id, ...) resolving
+// to the same application name is covered.
+const APPLICATION_MAX_DIMENSIONS = [
+  { match: 'kitty', maxWidth: 1300, maxHeight: null },
+];
+
+function getApplicationMaxDimensions(applicationId) {
+  if (typeof applicationId !== 'string') {
+    return null;
+  }
+  const name = applicationId.includes(':')
+    ? applicationId.slice(applicationId.indexOf(':') + 1)
+    : applicationId;
+  for (const limit of APPLICATION_MAX_DIMENSIONS) {
+    if (name === limit.match) {
+      return limit;
+    }
+  }
+  return null;
+}
+
 function getFocusWindow() {
   const win = global.display.focus_window;
   const skipTaskbar = typeof win?.is_skip_taskbar === 'function'
@@ -70,7 +95,18 @@ function isTileCandidate(win, workspace, monitorIndex, applicationId) {
     || win.get_window_type() === Meta.WindowType.NORMAL;
 }
 
-function chooseGrid(windowCount, workArea) {
+function chooseGrid(windowCount, workArea, maxWidth) {
+  // When a maximum tile width is configured, it dictates how many windows can
+  // sit side by side: pack as many columns as fit under the cap, then wrap the
+  // remaining windows onto additional rows. On a 4K display (3840px) with a
+  // 1300px cap this yields three columns, with extras stacking vertically.
+  if (maxWidth != null && maxWidth > 0) {
+    const maxColumns = Math.max(1, Math.ceil(workArea.width / maxWidth));
+    const columns = Math.min(windowCount, maxColumns);
+    const rows = Math.ceil(windowCount / columns);
+    return { rows, columns };
+  }
+
   if (windowCount === 1) {
     return { rows: 1, columns: 1 };
   }
@@ -142,7 +178,9 @@ function tileFocusedApplicationWindows() {
       return;
     }
 
-    const { rows, columns } = chooseGrid(windows.length, workArea);
+    const maxDimensions = getApplicationMaxDimensions(applicationId);
+    console.log(`automatic-window-tiling: applicationId=${applicationId} maxDimensions=${JSON.stringify(maxDimensions)} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`);
+    const { rows, columns } = chooseGrid(windows.length, workArea, maxDimensions?.maxWidth);
     for (let index = 0; index < windows.length; index++) {
       const win = windows[index];
       const row = Math.floor(index / columns);
@@ -152,8 +190,26 @@ function tileFocusedApplicationWindows() {
       const y1 = workArea.y + Math.floor(row * workArea.height / rows);
       const y2 = workArea.y + Math.floor((row + 1) * workArea.height / rows);
 
+      let cellX = x1;
+      let cellY = y1;
+      let cellWidth = x2 - x1;
+      let cellHeight = y2 - y1;
+
+      if (maxDimensions) {
+        if (maxDimensions.maxWidth != null && cellWidth > maxDimensions.maxWidth) {
+          cellX = x1 + Math.floor((cellWidth - maxDimensions.maxWidth) / 2);
+          cellWidth = maxDimensions.maxWidth;
+        }
+        if (maxDimensions.maxHeight != null && cellHeight > maxDimensions.maxHeight) {
+          cellY = y1 + Math.floor((cellHeight - maxDimensions.maxHeight) / 2);
+          cellHeight = maxDimensions.maxHeight;
+        }
+      }
+
       prepareWindow(win);
-      win.move_resize_frame(true, x1, y1, x2 - x1, y2 - y1);
+      win.move_resize_frame(true, cellX, cellY, cellWidth, cellHeight);
+      const frame = typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null;
+      console.log(`automatic-window-tiling: requested ${cellWidth}x${cellHeight} -> actual ${frame ? `${frame.width}x${frame.height}` : 'unknown'}`);
     }
 
     raiseWindow(focusedWindow, workspace);
