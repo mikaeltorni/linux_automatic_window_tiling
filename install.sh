@@ -1,4 +1,22 @@
 #!/usr/bin/env bash
+#
+# install.sh — Install the Automatic Window Tiling GNOME Shell extension.
+#
+# Copies the extension into the target user's local GNOME Shell extensions
+# directory, compiles its gsettings schema, applies the requested keyboard
+# accelerator, and enables the extension. Works run directly as the desktop
+# user or through sudo (deriving the target from SUDO_USER).
+#
+# Functions:
+#   usage           - print invocation help.
+#   parse_binding   - validate args and echo the chosen accelerator.
+#   gsettings_array - render a single value as a gsettings string array literal.
+#   run_as_target   - run a command in the target user's session environment.
+#   main            - orchestrate the full installation.
+#
+# Usage:
+#   sudo bash install.sh '<Super>t'
+#   sudo bash install.sh --binding '<Control><Alt>t'
 set -euo pipefail
 
 EXTENSION_ID="automatic-window-tiling@local"
@@ -6,6 +24,9 @@ SCHEMA_ID="org.gnome.shell.extensions.automatic-window-tiling"
 BINDING_KEY="tile-focused-application-windows"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Print usage instructions to stdout.
+# Arguments: none.
+# Returns: 0.
 usage() {
   cat <<'EOF'
 Usage:
@@ -14,6 +35,11 @@ Usage:
 EOF
 }
 
+# Validate command-line arguments and emit the chosen accelerator.
+# Accepts either a single positional accelerator or `--binding <accelerator>`.
+# Arguments: the script's "$@".
+# Output: the accelerator string on stdout.
+# Returns: 0 on success; 1 when the arguments are malformed.
 parse_binding() {
   if [[ "${1:-}" == "--binding" ]]; then
     [[ $# -eq 2 ]] || return 1
@@ -25,6 +51,11 @@ parse_binding() {
   printf '%s\n' "$1"
 }
 
+# Render a single value as a gsettings string-array literal, escaping
+# backslashes and single quotes so the result is safe to pass to `gsettings set`.
+# Arguments: $1 - the raw accelerator value.
+# Output: the literal `['<escaped-value>']` on stdout.
+# Returns: 0.
 gsettings_array() {
   local value="$1"
   value="${value//\\/\\\\}"
@@ -32,6 +63,11 @@ gsettings_array() {
   printf "['%s']\n" "$value"
 }
 
+# Run a command inside the target user's session environment (HOME, D-Bus,
+# display, runtime dir). Executes directly when already that user, otherwise
+# re-enters through `sudo -H -u`.
+# Arguments: $@ - the command and its arguments to execute.
+# Returns: the wrapped command's exit status.
 run_as_target() {
   local -a environment=(
     "HOME=$TARGET_HOME"
@@ -49,6 +85,11 @@ run_as_target() {
   fi
 }
 
+# Orchestrate the installation: parse the accelerator, resolve the target user,
+# copy extension files, compile the schema, apply the binding, and enable the
+# extension.
+# Arguments: the script's "$@" (the accelerator specification).
+# Returns: 0 on success; 1 on environment errors; 2 on bad arguments.
 main() {
   local binding
   if ! binding="$(parse_binding "$@")" || [[ -z "$binding" ]]; then
