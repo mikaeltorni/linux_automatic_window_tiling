@@ -15,6 +15,8 @@ be bound without editing the extension source.
 - Two windows tile left/right.
 - Four windows use a 2x2 grid.
 - Other counts use a balanced calculated grid.
+- Kitty uses a 1300px preferred width to choose grid density on wide monitors,
+  but tiled windows always expand to fill their complete grid cells.
 - GNOME's work area is used, excluding panels and docks.
 
 ## Installation

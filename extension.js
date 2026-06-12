@@ -7,12 +7,13 @@
  *
  * Functions/Classes:
  * - log: centralized, level-aware logging helper with a consistent prefix.
- * - getApplicationMaxDimensions: per-application tile size cap lookup.
+ * - getApplicationPreferredWidth: per-application layout width lookup.
  * - getFocusWindow: resolve the currently focused, tileable window.
  * - canTileWindow: predicate for whether a window may be moved/resized.
  * - getWindowApplicationId: derive a stable application identity for a window.
  * - isTileCandidate: predicate for whether a window belongs in the tiling set.
  * - chooseGrid: compute the rows/columns layout for a window count.
+ * - calculateTileRect: compute the full work-area cell for a window.
  * - prepareWindow: clear maximized/fullscreen/minimized state before tiling.
  * - raiseWindow: raise and mark a window as the most recent.
  * - tileFocusedApplicationWindows: keybinding handler that performs the tiling.
@@ -67,38 +68,36 @@ const log = {
   },
 };
 
-// Optional per-application tile size limits. Each entry maps a window
-// application identifier (see getWindowApplicationId) to an upper bound, in
-// physical pixels, for a tiled window's width and/or height. A null bound
-// leaves that dimension unconstrained. Matching is done on the identifier
+// Optional per-application preferred widths. The value controls grid density,
+// but is not a hard size cap: when fewer windows are present, their cells
+// expand to consume the full work area. Matching is done on the identifier
 // suffix so any identity source (wm-class, gtk-application-id, ...) resolving
 // to the same application name is covered.
-const APPLICATION_MAX_DIMENSIONS = [
-  { match: 'kitty', maxWidth: 1300, maxHeight: null },
+const APPLICATION_PREFERRED_WIDTHS = [
+  { match: 'kitty', preferredWidth: 1300 },
 ];
 
 /**
- * Look up the configured tile size cap for an application identifier.
+ * Look up the configured layout width for an application identifier.
  *
  * The identifier may be prefixed by its identity source (for example
  * `wm-class:kitty`); only the suffix after the first colon is matched against
  * the configured application names.
  *
  * @param {string} applicationId - Identifier from getWindowApplicationId.
- * @returns {{match: string, maxWidth: ?number, maxHeight: ?number}|null}
- *   The matching limit entry, or null when no cap is configured or the input
- *   is not a string.
+ * @returns {number|null} The preferred tile width, or null when no preference
+ *   is configured or the input is not a string.
  */
-function getApplicationMaxDimensions(applicationId) {
+function getApplicationPreferredWidth(applicationId) {
   if (typeof applicationId !== 'string') {
     return null;
   }
   const name = applicationId.includes(':')
     ? applicationId.slice(applicationId.indexOf(':') + 1)
     : applicationId;
-  for (const limit of APPLICATION_MAX_DIMENSIONS) {
-    if (name === limit.match) {
-      return limit;
+  for (const preference of APPLICATION_PREFERRED_WIDTHS) {
+    if (name === preference.match) {
+      return preference.preferredWidth;
     }
   }
   return null;
@@ -211,23 +210,22 @@ function isTileCandidate(win, workspace, monitorIndex, applicationId) {
 /**
  * Compute the grid layout (rows and columns) for a set of windows.
  *
- * When a maximum tile width is configured, the column count is derived from how
- * many cells fit under the cap; otherwise a balanced grid is chosen by scoring
- * each candidate row count on empty cells and cell aspect ratio.
+ * When a preferred tile width is configured, the column count is derived from
+ * that target density; otherwise a balanced grid is chosen by scoring each
+ * candidate row count on empty cells and cell aspect ratio.
  *
  * @param {number} windowCount - Number of windows to place (>= 1).
  * @param {{x: number, y: number, width: number, height: number}} workArea -
  *   Available work area in physical pixels.
- * @param {?number} maxWidth - Optional per-window maximum width cap, or null.
+ * @param {?number} preferredWidth - Optional target cell width, or null.
  * @returns {{rows: number, columns: number}} The chosen grid dimensions.
  */
-function chooseGrid(windowCount, workArea, maxWidth) {
-  // When a maximum tile width is configured, it dictates how many windows can
-  // sit side by side: pack as many columns as fit under the cap, then wrap the
-  // remaining windows onto additional rows. On a 4K display (3840px) with a
-  // 1300px cap this yields three columns, with extras stacking vertically.
-  if (maxWidth != null && maxWidth > 0) {
-    const maxColumns = Math.max(1, Math.ceil(workArea.width / maxWidth));
+function chooseGrid(windowCount, workArea, preferredWidth) {
+  // The preferred width determines how many columns to target, while the
+  // resulting cells still divide and consume the full work area. On a 4K
+  // display (3840px), a 1300px preference yields three columns.
+  if (preferredWidth != null && preferredWidth > 0) {
+    const maxColumns = Math.max(1, Math.ceil(workArea.width / preferredWidth));
     const columns = Math.min(windowCount, maxColumns);
     const rows = Math.ceil(windowCount / columns);
     return { rows, columns };
@@ -255,6 +253,35 @@ function chooseGrid(windowCount, workArea, maxWidth) {
   }
 
   return { rows: best.rows, columns: best.columns };
+}
+
+/**
+ * Compute the full grid cell assigned to one tiled window.
+ *
+ * Integer boundaries are calculated from the work-area edges so adjacent
+ * cells cover the complete area without rounding gaps.
+ *
+ * @param {number} index - Zero-based window index.
+ * @param {number} rows - Number of grid rows.
+ * @param {number} columns - Number of grid columns.
+ * @param {{x: number, y: number, width: number, height: number}} workArea -
+ *   Available work area in physical pixels.
+ * @returns {{x: number, y: number, width: number, height: number}} Tile bounds.
+ */
+function calculateTileRect(index, rows, columns, workArea) {
+  const row = Math.floor(index / columns);
+  const column = index % columns;
+  const x1 = workArea.x + Math.floor(column * workArea.width / columns);
+  const x2 = workArea.x + Math.floor((column + 1) * workArea.width / columns);
+  const y1 = workArea.y + Math.floor(row * workArea.height / rows);
+  const y2 = workArea.y + Math.floor((row + 1) * workArea.height / rows);
+
+  return {
+    x: x1,
+    y: y1,
+    width: x2 - x1,
+    height: y2 - y1,
+  };
 }
 
 /**
@@ -304,8 +331,8 @@ function raiseWindow(win, workspace) {
  *
  * Collects the focused application's windows on the active workspace and
  * monitor, orders them with the focused window first, computes a grid, and
- * moves each window into its cell (optionally centered under a configured size
- * cap). Errors are caught and logged so a failure never crashes the Shell.
+ * moves each window into its full cell. Errors are caught and logged so a
+ * failure never crashes the Shell.
  *
  * @returns {void}
  */
@@ -335,38 +362,17 @@ function tileFocusedApplicationWindows() {
       return;
     }
 
-    const maxDimensions = getApplicationMaxDimensions(applicationId);
-    log.info(`applicationId=${applicationId} maxDimensions=${JSON.stringify(maxDimensions)} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`);
-    const { rows, columns } = chooseGrid(windows.length, workArea, maxDimensions?.maxWidth);
+    const preferredWidth = getApplicationPreferredWidth(applicationId);
+    log.info(`applicationId=${applicationId} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`);
+    const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth);
     for (let index = 0; index < windows.length; index++) {
       const win = windows[index];
-      const row = Math.floor(index / columns);
-      const column = index % columns;
-      const x1 = workArea.x + Math.floor(column * workArea.width / columns);
-      const x2 = workArea.x + Math.floor((column + 1) * workArea.width / columns);
-      const y1 = workArea.y + Math.floor(row * workArea.height / rows);
-      const y2 = workArea.y + Math.floor((row + 1) * workArea.height / rows);
-
-      let cellX = x1;
-      let cellY = y1;
-      let cellWidth = x2 - x1;
-      let cellHeight = y2 - y1;
-
-      if (maxDimensions) {
-        if (maxDimensions.maxWidth != null && cellWidth > maxDimensions.maxWidth) {
-          cellX = x1 + Math.floor((cellWidth - maxDimensions.maxWidth) / 2);
-          cellWidth = maxDimensions.maxWidth;
-        }
-        if (maxDimensions.maxHeight != null && cellHeight > maxDimensions.maxHeight) {
-          cellY = y1 + Math.floor((cellHeight - maxDimensions.maxHeight) / 2);
-          cellHeight = maxDimensions.maxHeight;
-        }
-      }
+      const tile = calculateTileRect(index, rows, columns, workArea);
 
       prepareWindow(win);
-      win.move_resize_frame(true, cellX, cellY, cellWidth, cellHeight);
+      win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height);
       const frame = typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null;
-      log.info(`requested ${cellWidth}x${cellHeight} -> actual ${frame ? `${frame.width}x${frame.height}` : 'unknown'}`);
+      log.info(`requested ${tile.width}x${tile.height} -> actual ${frame ? `${frame.width}x${frame.height}` : 'unknown'}`);
     }
 
     raiseWindow(focusedWindow, workspace);

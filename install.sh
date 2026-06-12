@@ -15,7 +15,8 @@
 #   main            - orchestrate the full installation.
 #
 # Usage:
-#   sudo bash install.sh '<Super>t'
+#   bash install.sh '<Super>t'              # sudo-free, run as the desktop user
+#   sudo bash install.sh '<Super>t'         # also supported (clean-install chain)
 #   sudo bash install.sh --binding '<Control><Alt>t'
 set -euo pipefail
 
@@ -30,6 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
+  bash install.sh '<Super>t'
   sudo bash install.sh '<Super>t'
   sudo bash install.sh --binding '<Control><Alt>t'
 EOF
