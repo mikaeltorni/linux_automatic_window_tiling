@@ -46,6 +46,11 @@ new version.
 
 ## Development
 
+Runtime modules:
+
+- `extension.js` owns GNOME Shell integration, window selection, and lifecycle.
+- `layout.js` owns pure grid selection and tile geometry calculations.
+
 Run tests and syntax checks:
 
 ```bash

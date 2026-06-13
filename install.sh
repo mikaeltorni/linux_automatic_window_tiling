@@ -118,7 +118,11 @@ main() {
   }
 
   install -d "$target_dir/schemas"
-  install -m 0644 "$SCRIPT_DIR/extension.js" "$SCRIPT_DIR/metadata.json" "$target_dir/"
+  install -m 0644 \
+    "$SCRIPT_DIR/extension.js" \
+    "$SCRIPT_DIR/layout.js" \
+    "$SCRIPT_DIR/metadata.json" \
+    "$target_dir/"
   install -m 0644 \
     "$SCRIPT_DIR/schemas/org.gnome.shell.extensions.automatic-window-tiling.gschema.xml" \
     "$target_dir/schemas/"
