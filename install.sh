@@ -122,6 +122,7 @@ main() {
     "$SCRIPT_DIR/extension.js" \
     "$SCRIPT_DIR/layout.js" \
     "$SCRIPT_DIR/metadata.json" \
+    "$SCRIPT_DIR/windows.js" \
     "$target_dir/"
   install -m 0644 \
     "$SCRIPT_DIR/schemas/org.gnome.shell.extensions.automatic-window-tiling.gschema.xml" \

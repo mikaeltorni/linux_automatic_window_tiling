@@ -48,8 +48,9 @@ new version.
 
 Runtime modules:
 
-- `extension.js` owns GNOME Shell integration, window selection, and lifecycle.
+- `extension.js` owns tiling orchestration, logging, and extension lifecycle.
 - `layout.js` owns pure grid selection and tile geometry calculations.
+- `windows.js` owns GNOME window selection, identity, and state management.
 
 Run tests and syntax checks:
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+WINDOW_MODULE = ROOT / "windows.js"
 
 
 def _extract_function(source, function_name):
@@ -28,6 +29,31 @@ def _extract_function(source, function_name):
             if depth == 0:
                 return source[start : end + 1]
     raise AssertionError(f"could not locate end of {function_name}")
+
+
+def _run_javascript(source, body):
+    """Evaluate JavaScript source plus a test body and return parsed JSON."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is required to evaluate JavaScript helpers")
+
+    completed = subprocess.run(
+        [node, "-e", f"{source}\n{body}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(completed.stdout.strip())
+
+
+def _run_window_helpers(function_names, body):
+    """Evaluate selected window helpers with caller-provided GNOME fakes."""
+    source = WINDOW_MODULE.read_text(encoding="utf-8")
+    functions = "\n".join(
+        _extract_function(source, function_name)
+        for function_name in function_names
+    )
+    return _run_javascript(functions, body)
 
 
 def _choose_grid(window_count, width, height, preferred_width):
@@ -86,18 +112,214 @@ console.log(JSON.stringify(result));
 def test_extension_filters_by_application_workspace_and_monitor():
     source = (ROOT / "extension.js").read_text(encoding="utf-8")
     layout_source = (ROOT / "layout.js").read_text(encoding="utf-8")
+    window_source = WINDOW_MODULE.read_text(encoding="utf-8")
 
     assert "getWindowApplicationId" in source
     assert "global.workspace_manager.get_active_workspace()" in source
-    assert "win.get_monitor() !== monitorIndex" in source
+    assert "win.get_monitor() !== monitorIndex" in window_source
     assert "workspace.get_work_area_for_monitor(monitorIndex)" in source
     assert "win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height)" in source
     assert "getApplicationPreferredWidth" in source
     assert "from './layout.js'" in source
+    assert "from './windows.js'" in source
     assert "preferredWidth: 1300" in source
     assert "if (windowCount === 2)" in layout_source
     assert "return { rows: 1, columns: 2 };" in layout_source
     assert "workArea.width >= workArea.height" not in layout_source
+
+
+def test_get_focus_window_rejects_missing_and_taskbar_skipping_windows():
+    result = _run_window_helpers(
+        ["getFocusWindow"],
+        """
+const valid = { skip_taskbar: false };
+global.display = { focus_window: null };
+const missing = getFocusWindow();
+global.display.focus_window = { is_skip_taskbar: () => true };
+const skippedByMethod = getFocusWindow();
+global.display.focus_window = { skip_taskbar: true };
+const skippedByProperty = getFocusWindow();
+global.display.focus_window = valid;
+const accepted = getFocusWindow();
+console.log(JSON.stringify({
+  missing: missing === null,
+  skippedByMethod: skippedByMethod === null,
+  skippedByProperty: skippedByProperty === null,
+  accepted: accepted === valid,
+}));
+""",
+    )
+
+    assert result == {
+        "missing": True,
+        "skippedByMethod": True,
+        "skippedByProperty": True,
+        "accepted": True,
+    }
+
+
+def test_can_tile_window_requires_move_and_resize_capabilities():
+    result = _run_window_helpers(
+        ["canTileWindow"],
+        """
+const movable = {
+  move_resize_frame() {},
+  allows_resize: () => true,
+  allows_move: () => true,
+};
+console.log(JSON.stringify({
+  missing: canTileWindow(null),
+  noMoveResize: canTileWindow({}),
+  fixedSize: canTileWindow({ ...movable, allows_resize: () => false }),
+  fixedPosition: canTileWindow({ ...movable, allows_move: () => false }),
+  movable: canTileWindow(movable),
+}));
+""",
+    )
+
+    assert result == {
+        "missing": False,
+        "noMoveResize": False,
+        "fixedSize": False,
+        "fixedPosition": False,
+        "movable": True,
+    }
+
+
+def test_window_application_id_uses_priority_normalization_and_app_fallback():
+    result = _run_window_helpers(
+        ["getWindowApplicationId"],
+        """
+const Shell = {
+  WindowTracker: {
+    get_default: () => ({
+      get_window_app: win => win.trackedApp ?? null,
+    }),
+  },
+};
+const preferred = {
+  get_gtk_application_id: () => '  Org.Example.App  ',
+  get_wm_class: () => 'Ignored',
+};
+const fallback = {
+  trackedApp: { get_id: () => '  Fallback.Desktop  ' },
+};
+const unknown = {};
+console.log(JSON.stringify({
+  preferred: getWindowApplicationId(preferred),
+  fallback: getWindowApplicationId(fallback),
+  unknown: getWindowApplicationId(unknown),
+}));
+""",
+    )
+
+    assert result == {
+        "preferred": "gtk-application-id:org.example.app",
+        "fallback": "app:fallback.desktop",
+        "unknown": None,
+    }
+
+
+def test_tile_candidate_enforces_application_monitor_workspace_and_window_type():
+    result = _run_window_helpers(
+        ["canTileWindow", "getWindowApplicationId", "isTileCandidate"],
+        """
+const Meta = { WindowType: { NORMAL: 1 } };
+const Shell = {
+  WindowTracker: {
+    get_default: () => ({ get_window_app: () => null }),
+  },
+};
+const workspace = {};
+const base = {
+  move_resize_frame() {},
+  allows_resize: () => true,
+  allows_move: () => true,
+  get_wm_class: () => 'Kitty',
+  get_monitor: () => 2,
+  located_on_workspace: candidate => candidate === workspace,
+  is_skip_taskbar: () => false,
+  get_window_type: () => Meta.WindowType.NORMAL,
+};
+const candidate = win => isTileCandidate(
+  win,
+  workspace,
+  2,
+  'wm-class:kitty',
+);
+console.log(JSON.stringify({
+  accepted: candidate(base),
+  wrongApp: candidate({ ...base, get_wm_class: () => 'Other' }),
+  wrongMonitor: candidate({ ...base, get_monitor: () => 1 }),
+  wrongWorkspace: candidate({
+    ...base,
+    located_on_workspace: () => false,
+  }),
+  skipped: candidate({ ...base, is_skip_taskbar: () => true }),
+  dialog: candidate({ ...base, get_window_type: () => 2 }),
+  immovable: candidate({ ...base, allows_move: () => false }),
+}));
+""",
+    )
+
+    assert result == {
+        "accepted": True,
+        "wrongApp": False,
+        "wrongMonitor": False,
+        "wrongWorkspace": False,
+        "skipped": False,
+        "dialog": False,
+        "immovable": False,
+    }
+
+
+def test_prepare_window_clears_blocking_states():
+    result = _run_window_helpers(
+        ["prepareWindow"],
+        """
+const calls = [];
+prepareWindow({
+  get_maximized: () => 3,
+  unmaximize: state => calls.push(['unmaximize', state]),
+  unmake_fullscreen: () => calls.push(['unmake_fullscreen']),
+  unminimize: () => calls.push(['unminimize']),
+});
+prepareWindow({
+  get_maximized: () => 0,
+  unmaximize: state => calls.push(['unexpected', state]),
+});
+console.log(JSON.stringify(calls));
+""",
+    )
+
+    assert result == [
+        ["unmaximize", 3],
+        ["unmake_fullscreen"],
+        ["unminimize"],
+    ]
+
+
+def test_raise_window_prefers_workspace_api_and_supports_fallback():
+    result = _run_window_helpers(
+        ["raiseWindow"],
+        """
+const calls = [];
+const workspace = { id: 'active' };
+raiseWindow({
+  raise_and_make_recent_on_workspace: candidate => {
+    calls.push(['workspace', candidate.id]);
+  },
+  raise_and_make_recent: () => calls.push(['unexpected']),
+}, workspace);
+raiseWindow({
+  raise_and_make_recent: () => calls.push(['fallback']),
+}, workspace);
+raiseWindow({}, workspace);
+console.log(JSON.stringify(calls));
+""",
+    )
+
+    assert result == [["workspace", "active"], ["fallback"]]
 
 
 def test_schema_has_no_hard_coded_binding():
@@ -122,6 +344,7 @@ def test_installer_requires_and_applies_binding_argument():
     assert 'TARGET_USER="${SUDO_USER:-${TARGET_USER:-$USER}}"' in installer
     assert 'if [[ "$(id -u)" -eq "$TARGET_UID" ]]' in installer
     assert '"$SCRIPT_DIR/layout.js"' in installer
+    assert '"$SCRIPT_DIR/windows.js"' in installer
 
 
 def test_preferred_width_drives_three_columns_on_4k():
