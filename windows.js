@@ -32,7 +32,7 @@ export function getFocusWindow() {
  * @returns {boolean} True when the window exposes move_resize_frame and permits
  *   both resizing and moving; false otherwise.
  */
-export function canTileWindow(win) {
+function canTileWindow(win) {
   if (!win || typeof win.move_resize_frame !== 'function') {
     return false;
   }
