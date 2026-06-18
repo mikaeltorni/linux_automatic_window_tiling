@@ -10,11 +10,12 @@ idempotently for the target desktop user, and avoid hard-coded checkout paths.
 After changing installed behavior, run tests, deploy the extension to the
 current machine, and verify GNOME reports it as active.
 
-Do not run `gnome-shell --replace` automatically. It can disrupt the current
-desktop session and leave user extensions globally disabled. Deploy files and
-settings safely, then ask for logout/login when a fresh Shell process is
-required. Always verify `org.gnome.shell disable-user-extensions` remains
-`false` and that previously enabled extensions are still active.
+Reload GNOME Shell the safe way only: never `gnome-shell --replace`, log the
+user out, or kill the Shell. Deploy files, then reload in place on X11
+(`Alt+F2 r`) or ask for logout/login on Wayland, keeping
+`org.gnome.shell disable-user-extensions` `false` and previously enabled
+extensions active. The full procedure lives in the `linux-configuration`
+skill, which is the single source of truth for GNOME reload safety.
 
 ## Clean Installation Compatibility
 
