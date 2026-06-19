@@ -23,6 +23,12 @@ export function chooseGrid(windowCount, workArea, preferredWidth) {
   // resulting cells still divide and consume the full work area. On a 4K
   // display (3840px), a 1300px preference yields three columns.
   if (preferredWidth != null && preferredWidth > 0) {
+    // Force balanced grid for perfect-square window counts regardless of preferred width.
+    const sqrt = Math.round(Math.sqrt(windowCount));
+    if (sqrt * sqrt === windowCount && sqrt > 1) {
+      return { rows: sqrt, columns: sqrt };
+    }
+
     const maxColumns = Math.max(1, Math.ceil(workArea.width / preferredWidth));
     const columns = Math.min(windowCount, maxColumns);
     const rows = Math.ceil(windowCount / columns);
@@ -34,6 +40,12 @@ export function chooseGrid(windowCount, workArea, preferredWidth) {
   }
   if (windowCount === 2) {
     return { rows: 1, columns: 2 };
+  }
+
+  // Perfect-square counts should always produce balanced grids.
+  const sqrt = Math.round(Math.sqrt(windowCount));
+  if (sqrt * sqrt === windowCount && sqrt > 1) {
+    return { rows: sqrt, columns: sqrt };
   }
 
   let best = null;
