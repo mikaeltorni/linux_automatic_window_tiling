@@ -354,9 +354,10 @@ def test_preferred_width_drives_three_columns_on_4k():
 
 
 def test_preferred_width_wraps_extra_windows_to_new_rows():
-    # A fourth window stacks onto a second row while the preferred column count
-    # stays at three.
-    assert _choose_grid(4, 3840, 2160, 1300) == {"rows": 2, "columns": 3}
+    # Perfect-square counts stay balanced even when preferred width would allow
+    # a wider grid with empty cells.
+    assert _choose_grid(4, 3840, 2160, 1300) == {"rows": 2, "columns": 2}
+    # Non-square counts keep the preferred column density and wrap rows.
     assert _choose_grid(7, 3840, 2160, 1300) == {"rows": 3, "columns": 3}
 
 
