@@ -136,31 +136,10 @@ main() {
     "$SCHEMA_ID" "$BINDING_KEY" "$(gsettings_array "$binding")"
   run_as_target gsettings set org.gnome.shell disable-user-extensions false
 
-  local enabled
+  local enabled enabled_with_extension
   enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)"
-  run_as_target env CURRENT_EXTENSIONS="$enabled" EXTENSION_ID="$EXTENSION_ID" python3 - <<'PY'
-import ast
-import os
-import subprocess
-
-raw = os.environ["CURRENT_EXTENSIONS"].strip()
-if raw.startswith("@as "):
-    raw = raw[4:].strip()
-try:
-    extensions = ast.literal_eval(raw)
-except (SyntaxError, ValueError):
-    extensions = []
-if not isinstance(extensions, list):
-    extensions = []
-
-extension_id = os.environ["EXTENSION_ID"]
-if extension_id not in extensions:
-    extensions.append(extension_id)
-subprocess.run(
-    ["gsettings", "set", "org.gnome.shell", "enabled-extensions", repr(extensions)],
-    check=True,
-)
-PY
+  enabled_with_extension="$(CURRENT="$enabled" python3 "$SCRIPT_DIR/lib/gsettings_strv.py" "$EXTENSION_ID")"
+  run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension"
 
   run_as_target gnome-extensions enable "$EXTENSION_ID" 2>/dev/null || true
   printf 'Installed %s with binding %s.\n' "$EXTENSION_ID" "$binding"
