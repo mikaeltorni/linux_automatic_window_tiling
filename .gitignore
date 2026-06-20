@@ -2,3 +2,5 @@
 schemas/gschemas.compiled
 tests/__pycache__/
 .pytest_cache/
+
+lib/__pycache__/
