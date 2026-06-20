@@ -8,6 +8,17 @@ the focused window's current workspace and monitor.
 The installer accepts the desired GNOME accelerator, so the tiling action can
 be bound without editing the extension source.
 
+## Repository dependencies
+
+This repository installs and runs **standalone** — it has **no** dependency on
+any other setup repository. It is *consumed by* `linux_hotkey_setup` and
+`linux_workspaces_setup`, which call this installer (passing the desired
+accelerator) when it sits beside them; that is a one-way relationship and does
+not create a dependency in this direction.
+
+See the full cross-repository map in
+[installation_scripts/DEPENDENCIES.md](https://github.com/mikaeltorni/installation_scripts/blob/master/DEPENDENCIES.md).
+
 ## Behavior
 
 - Only normal, taskbar-visible windows are tiled.
