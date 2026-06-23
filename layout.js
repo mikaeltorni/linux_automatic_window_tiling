@@ -19,19 +19,18 @@
  * @returns {{rows: number, columns: number}} The chosen grid dimensions.
  */
 export function chooseGrid(windowCount, workArea, preferredWidth) {
-  // Portrait monitors prefer vertical stacking: windows fill a single column
-  // (one above the other) and only split into more columns once each column
-  // would still meet the minimum comfortable width. This keeps the first two
-  // (and further) windows stacked vertically until the horizontal minimum is
-  // reached, instead of squeezing them side by side on a narrow tall display.
+  // Portrait monitors stack windows vertically but pack as many columns
+  // side by side as fit at the minimum horizontal tile width, then wrap the
+  // remaining windows onto further rows. On a 2160px-wide portrait display two
+  // 1080px columns fit, so windows sit next to each other and larger counts
+  // grow into a sensible balanced grid instead of one tall single column. The
+  // per-application preferred width is a density hint for wide monitors only;
+  // portrait packing is governed solely by this hard minimum.
   if (workArea.height > workArea.width) {
-    // Minimum comfortable tile width (physical pixels) used when no
-    // per-application preferred width is configured.
-    const DEFAULT_MIN_TILE_WIDTH = 1200;
-    const minWidth = preferredWidth != null && preferredWidth > 0
-      ? preferredWidth
-      : DEFAULT_MIN_TILE_WIDTH;
-    const maxColumns = Math.max(1, Math.floor(workArea.width / minWidth));
+    // Minimum horizontal tile width (physical pixels): a column is never made
+    // narrower than this, which caps how many columns a portrait monitor holds.
+    const MIN_TILE_WIDTH = 1080;
+    const maxColumns = Math.max(1, Math.floor(workArea.width / MIN_TILE_WIDTH));
     const columns = Math.min(windowCount, maxColumns);
     const rows = Math.ceil(windowCount / columns);
     return { rows, columns };
