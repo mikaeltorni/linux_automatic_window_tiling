@@ -10,12 +10,9 @@ idempotently for the target desktop user, and avoid hard-coded checkout paths.
 After changing installed behavior, run tests, deploy the extension to the
 current machine, and verify GNOME reports it as active.
 
-Reload GNOME Shell the safe way only: never `gnome-shell --replace`, log the
-user out, or kill the Shell. Deploy files, then reload in place on X11
-(`Alt+F2 r`) or ask for logout/login on Wayland, keeping
-`org.gnome.shell disable-user-extensions` `false` and previously enabled
-extensions active. The full procedure lives in the `linux-configuration`
-skill, which is the single source of truth for GNOME reload safety.
+Activating edited extension code requires reloading GNOME Shell. The
+`linux-configuration` skill is the single source of truth for the safe reload
+procedure; follow it rather than restating or diverging from it here.
 
 ## Clean Installation Compatibility
 
