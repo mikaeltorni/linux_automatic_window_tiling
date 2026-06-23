@@ -399,6 +399,30 @@ def test_two_tiles_expand_to_fill_available_width():
     assert left["width"] + right["width"] == 3840
 
 
+def test_portrait_monitor_stacks_first_windows_vertically():
+    # On a portrait monitor (height > width) the first two windows stack one
+    # above the other instead of going side by side. With kitty's 1300px
+    # preferred width on a 2160px-wide portrait display only one 1300px column
+    # fits, so windows keep stacking vertically.
+    assert _choose_grid(2, 2160, 3840, 1300) == {"rows": 2, "columns": 1}
+    # A third window still stacks vertically: two columns would be 1080px each,
+    # below the 1300px minimum horizontal width.
+    assert _choose_grid(3, 2160, 3840, 1300) == {"rows": 3, "columns": 1}
+
+
+def test_portrait_monitor_stacks_vertically_without_preferred_width():
+    # Without a per-application preference the default minimum width keeps a
+    # 2160px-wide portrait monitor in a single column.
+    assert _choose_grid(2, 2160, 3840, None) == {"rows": 2, "columns": 1}
+    assert _choose_grid(4, 2160, 3840, None) == {"rows": 4, "columns": 1}
+
+
+def test_portrait_monitor_adds_columns_once_minimum_width_fits():
+    # A wide-enough portrait work area fits two columns at the minimum width and
+    # places the first two windows side by side again.
+    assert _choose_grid(2, 2700, 3000, 1300) == {"rows": 1, "columns": 2}
+
+
 def test_without_preferred_width_falls_back_to_aspect_grid():
     # No preferred width: two windows tile side by side.
     assert _choose_grid(2, 3840, 2160, None) == {"rows": 1, "columns": 2}

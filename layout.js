@@ -19,6 +19,24 @@
  * @returns {{rows: number, columns: number}} The chosen grid dimensions.
  */
 export function chooseGrid(windowCount, workArea, preferredWidth) {
+  // Portrait monitors prefer vertical stacking: windows fill a single column
+  // (one above the other) and only split into more columns once each column
+  // would still meet the minimum comfortable width. This keeps the first two
+  // (and further) windows stacked vertically until the horizontal minimum is
+  // reached, instead of squeezing them side by side on a narrow tall display.
+  if (workArea.height > workArea.width) {
+    // Minimum comfortable tile width (physical pixels) used when no
+    // per-application preferred width is configured.
+    const DEFAULT_MIN_TILE_WIDTH = 1200;
+    const minWidth = preferredWidth != null && preferredWidth > 0
+      ? preferredWidth
+      : DEFAULT_MIN_TILE_WIDTH;
+    const maxColumns = Math.max(1, Math.floor(workArea.width / minWidth));
+    const columns = Math.min(windowCount, maxColumns);
+    const rows = Math.ceil(windowCount / columns);
+    return { rows, columns };
+  }
+
   // The preferred width determines how many columns to target, while the
   // resulting cells still divide and consume the full work area. On a 4K
   // display (3840px), a 1300px preference yields three columns.
