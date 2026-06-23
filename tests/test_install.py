@@ -338,6 +338,8 @@ def test_installer_requires_and_applies_binding_argument():
     installer = (ROOT / "install.sh").read_text(encoding="utf-8")
 
     assert 'parse_binding "$@"' in installer
+    assert 'source "$SCRIPT_DIR/lib/installer_logging.sh"' in installer
+    assert "installer_log" in installer
     assert '"--binding"' in installer
     assert "gsettings_array" in installer
     assert '"$SCHEMA_ID" "$BINDING_KEY"' in installer
@@ -345,6 +347,28 @@ def test_installer_requires_and_applies_binding_argument():
     assert 'if [[ "$(id -u)" -eq "$TARGET_UID" ]]' in installer
     assert '"$SCRIPT_DIR/layout.js"' in installer
     assert '"$SCRIPT_DIR/windows.js"' in installer
+
+
+def test_installer_logs_meaningful_install_phases():
+    installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+    logging_helper = (ROOT / "lib" / "installer_logging.sh").read_text(
+        encoding="utf-8"
+    )
+
+    expected_messages = [
+        "resolving target user",
+        "installing extension files",
+        "compiling gsettings schema",
+        "applying accelerator",
+        "ensuring user extensions stay enabled",
+        "adding $EXTENSION_ID to enabled extensions",
+        "requesting in-place extension enable",
+    ]
+
+    assert "automatic-window-tiling installer:" in logging_helper
+    assert "log_step" not in installer
+    for message in expected_messages:
+        assert f'installer_log "{message}' in installer
 
 
 def test_preferred_width_drives_three_columns_on_4k():

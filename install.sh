@@ -25,6 +25,8 @@ SCHEMA_ID="org.gnome.shell.extensions.automatic-window-tiling"
 BINDING_KEY="tile-focused-application-windows"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+source "$SCRIPT_DIR/lib/installer_logging.sh"
+
 # Print usage instructions to stdout.
 # Arguments: none.
 # Returns: 0.
@@ -100,6 +102,7 @@ main() {
   fi
 
   TARGET_USER="${SUDO_USER:-${TARGET_USER:-$USER}}"
+  installer_log "resolving target user: $TARGET_USER"
   if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
     printf 'Set TARGET_USER or run through sudo from the desktop user.\n' >&2
     return 1
@@ -111,6 +114,7 @@ main() {
   USER_BUS="unix:path=$RUNTIME_DIR/bus"
   DISPLAY_VALUE="${DISPLAY:-:0}"
   local target_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$EXTENSION_ID"
+  installer_log "installing extension files to $target_dir"
 
   command -v glib-compile-schemas >/dev/null 2>&1 || {
     printf 'glib-compile-schemas is required (package: libglib2.0-bin).\n' >&2
@@ -127,20 +131,26 @@ main() {
   install -m 0644 \
     "$SCRIPT_DIR/schemas/org.gnome.shell.extensions.automatic-window-tiling.gschema.xml" \
     "$target_dir/schemas/"
+  installer_log "compiling gsettings schema"
   glib-compile-schemas --strict "$target_dir/schemas"
   if [[ "$(id -u)" -eq 0 ]]; then
+    installer_log "setting extension ownership to $TARGET_USER:$TARGET_USER"
     chown -R "$TARGET_USER:$TARGET_USER" "$target_dir"
   fi
 
+  installer_log "applying accelerator for $BINDING_KEY"
   run_as_target gsettings --schemadir "$target_dir/schemas" set \
     "$SCHEMA_ID" "$BINDING_KEY" "$(gsettings_array "$binding")"
+  installer_log "ensuring user extensions stay enabled"
   run_as_target gsettings set org.gnome.shell disable-user-extensions false
 
   local enabled enabled_with_extension
+  installer_log "adding $EXTENSION_ID to enabled extensions"
   enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)"
   enabled_with_extension="$(CURRENT="$enabled" python3 "$SCRIPT_DIR/lib/gsettings_strv.py" "$EXTENSION_ID")"
   run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension"
 
+  installer_log "requesting in-place extension enable if GNOME already knows the extension"
   run_as_target gnome-extensions enable "$EXTENSION_ID" 2>/dev/null || true
   printf 'Installed %s with binding %s.\n' "$EXTENSION_ID" "$binding"
   printf 'Log out and back in if GNOME Shell has not loaded the extension.\n'
