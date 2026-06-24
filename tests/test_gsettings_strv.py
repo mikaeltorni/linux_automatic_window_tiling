@@ -94,10 +94,10 @@ def test_logging_utils_is_idempotent_and_traces_calls(tmp_path):
 
 
 def test_installer_uses_extracted_parser():
-    installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+    setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
 
-    assert "lib/gsettings_strv.py" in installer
-    assert "python3 - <<'PY'" not in installer
+    assert "lib/gsettings_strv.py" in setup
+    assert "python3 - <<'PY'" not in setup
 
 
 def test_python_logging_is_centralized():

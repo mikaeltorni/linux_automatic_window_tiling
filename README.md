@@ -10,11 +10,13 @@ be bound without editing the extension source.
 
 ## Repository dependencies
 
-This repository installs and runs **standalone** — it has **no** dependency on
-any other setup repository. It is *consumed by* `linux_hotkey_setup` and
-`linux_workspaces_setup`, which call this installer (passing the desired
-accelerator) when it sits beside them; that is a one-way relationship and does
-not create a dependency in this direction.
+This repository installs and runs **standalone**. Its installer uses the shared
+component framework owned by `linux_installation_scripts_functions`, resolving it
+from a sibling checkout when present and otherwise downloading it on demand, so a
+clean standalone install needs no other repository checked out. It is *consumed
+by* `linux_hotkey_setup` and `linux_workspaces_setup`, which call this installer
+(passing the desired accelerator) when it sits beside them; that is a one-way
+relationship and does not create a dependency in this direction.
 
 See the full cross-repository map in
 [installation_scripts/DEPENDENCIES.md](https://github.com/mikaeltorni/installation_scripts/blob/master/DEPENDENCIES.md).
@@ -34,22 +36,57 @@ See the full cross-repository map in
 
 ## Installation
 
-Pass a GNOME accelerator as the first argument:
+The installer always deploys and enables the extension core, so the tiling
+action works regardless of which optional pieces you keep. Each customizable
+behavior is then a selectable component, matching the component model used
+across `installation_scripts`.
+
+The quickest install passes a GNOME accelerator as the first argument and
+installs every default-on component:
 
 ```bash
 bash install.sh '<Super>t'
 ```
 
-Long-form syntax is also supported:
+Long-form binding syntax is also supported:
 
 ```bash
 bash install.sh --binding '<Control><Alt>t'
 ```
 
+Component-framework flags select exactly what to configure:
+
+```bash
+bash install.sh                      # interactive component menu on a TTY
+bash install.sh --default            # all default-on components, no prompts
+bash install.sh --all                # every component, no prompts
+bash install.sh --select keybinding  # only the listed component ids
+bash install.sh --list-components    # id<TAB>label<TAB>default, for tooling
+```
+
+### Components
+
+All components are default-on, so a plain install reproduces the extension's
+built-in behavior. Each writes a single gsettings key, so behavior stays fully
+customizable without editing the extension source:
+
+| Component | gsettings key | Env override | Default |
+| --- | --- | --- | --- |
+| `keybinding` | `tile-focused-application-windows` | `AWT_BINDING` | `<Super>t` |
+| `per_app_widths` | `application-preferred-widths` | `AWT_APP_WIDTHS` | `kitty:1300` |
+| `portrait_stacking` | `portrait-minimum-tile-width` | `AWT_PORTRAIT_MIN_WIDTH` | `1080` |
+
+`AWT_APP_WIDTHS` is a comma- or space-separated list of `name:width` entries.
+A `portrait-minimum-tile-width` of `0` or less keeps portrait monitors in a
+single, full-width column (pure vertical stacking). On a TTY the `keybinding`
+component also prompts for the accelerator, defaulting to `<Super>t`.
+
 The installer can run directly as the desktop user or through `sudo`. When run
 through `sudo`, it uses `SUDO_USER` to install into that user's local GNOME
-Shell extension directory and apply the binding through the user's session
-bus.
+Shell extension directory and apply settings through the user's session bus. It
+resolves the shared component framework from a sibling
+`linux_installation_scripts_functions` checkout, falling back to an on-demand
+download so a standalone clean install needs no extra setup.
 
 Log out and back in after installation when GNOME Shell cannot reload the
 extension in the current session. On X11, restarting GNOME Shell also loads the

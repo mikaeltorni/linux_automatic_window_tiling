@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+#
+# tiling_setup.sh — install steps for the Automatic Window Tiling extension.
+#
+# The core install (awt_install_core) deploys the extension and enables it so
+# tiling always works, regardless of which optional components the user selects.
+# Each selectable component then writes one gsettings key so its behavior is
+# fully customizable without editing the extension source.
+#
+# Functions:
+#   run_as_target            - run a command in the target user's session.
+#   gsettings_array          - render one value as a gsettings string-array literal.
+#   awt_set_strv             - write a string-array key on the bundled schema.
+#   awt_install_core         - deploy, compile, and enable the extension (always).
+#   awt_configure_keybinding - apply the tiling accelerator (AWT_BINDING).
+#   awt_configure_app_widths - set per-application preferred widths (AWT_APP_WIDTHS).
+#   awt_configure_portrait_stacking - set the portrait minimum tile width.
+#
+# Required globals (exported by install.sh before sourcing this file):
+#   SCRIPT_DIR TARGET_USER TARGET_UID TARGET_HOME RUNTIME_DIR USER_BUS
+#   DISPLAY_VALUE EXTENSION_ID SCHEMA_ID TARGET_DIR
+
+EXTENSION_ID="${EXTENSION_ID:-automatic-window-tiling@local}"
+SCHEMA_ID="${SCHEMA_ID:-org.gnome.shell.extensions.automatic-window-tiling}"
+BINDING_KEY="tile-focused-application-windows"
+APP_WIDTHS_KEY="application-preferred-widths"
+PORTRAIT_MIN_WIDTH_KEY="portrait-minimum-tile-width"
+
+# Defaults preserve the extension's built-in behavior. Override via the
+# environment to customize a clean or scripted install.
+AWT_BINDING="${AWT_BINDING:-<Super>t}"
+AWT_APP_WIDTHS="${AWT_APP_WIDTHS:-kitty:1300}"
+AWT_PORTRAIT_MIN_WIDTH="${AWT_PORTRAIT_MIN_WIDTH:-1080}"
+
+# Run a command inside the target user's session environment (HOME, D-Bus,
+# display, runtime dir). Executes directly when already that user, otherwise
+# re-enters through `sudo -H -u`.
+# Arguments: $@ - the command and its arguments to execute.
+# Returns: the wrapped command's exit status.
+run_as_target() {
+  local -a environment=(
+    "HOME=$TARGET_HOME"
+    "USER=$TARGET_USER"
+    "LOGNAME=$TARGET_USER"
+    "XDG_RUNTIME_DIR=$RUNTIME_DIR"
+    "DBUS_SESSION_BUS_ADDRESS=$USER_BUS"
+    "DISPLAY=$DISPLAY_VALUE"
+  )
+
+  if [[ "$(id -u)" -eq "$TARGET_UID" ]]; then
+    env "${environment[@]}" "$@"
+  else
+    sudo -H -u "$TARGET_USER" env "${environment[@]}" "$@"
+  fi
+}
+
+# Render a single value as a gsettings string-array literal, escaping
+# backslashes and single quotes so the result is safe to pass to `gsettings set`.
+# Arguments: $@ - raw values to include in the array.
+# Output: the literal `['<escaped>', ...]` on stdout.
+# Returns: 0.
+gsettings_array() {
+  local value out="" sep=""
+  for value in "$@"; do
+    value="${value//\\/\\\\}"
+    value="${value//\'/\\\'}"
+    out+="${sep}'${value}'"
+    sep=", "
+  done
+  printf '[%s]\n' "$out"
+}
+
+# Set a string-array key on the bundled schema in the target user's session.
+# Arguments: $1 - key name; $2.. - array values.
+# Returns: the gsettings exit status.
+awt_set_strv() {
+  local key="$1"; shift
+  run_as_target gsettings --schemadir "$TARGET_DIR/schemas" set \
+    "$SCHEMA_ID" "$key" "$(gsettings_array "$@")"
+}
+
+# awt_install_core — deploy the extension, compile its schema, and enable it.
+# Always runs so the core tiling action works no matter which optional
+# components are chosen. Idempotent: re-running overwrites files in place.
+# Returns: 0 on success; 1 on missing tooling.
+awt_install_core() {
+  installer_log "installing extension files to $TARGET_DIR"
+  command -v glib-compile-schemas >/dev/null 2>&1 || {
+    printf 'glib-compile-schemas is required (package: libglib2.0-bin).\n' >&2
+    return 1
+  }
+
+  install -d "$TARGET_DIR/schemas"
+  install -m 0644 \
+    "$SCRIPT_DIR/extension.js" \
+    "$SCRIPT_DIR/layout.js" \
+    "$SCRIPT_DIR/metadata.json" \
+    "$SCRIPT_DIR/windows.js" \
+    "$TARGET_DIR/"
+  install -m 0644 \
+    "$SCRIPT_DIR/schemas/org.gnome.shell.extensions.automatic-window-tiling.gschema.xml" \
+    "$TARGET_DIR/schemas/"
+  installer_log "compiling gsettings schema"
+  glib-compile-schemas --strict "$TARGET_DIR/schemas"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    installer_log "setting extension ownership to $TARGET_USER:$TARGET_USER"
+    chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_DIR"
+  fi
+
+  installer_log "ensuring user extensions stay enabled"
+  run_as_target gsettings set org.gnome.shell disable-user-extensions false
+
+  local enabled enabled_with_extension
+  installer_log "adding $EXTENSION_ID to enabled extensions"
+  enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)"
+  enabled_with_extension="$(CURRENT="$enabled" python3 "$SCRIPT_DIR/lib/gsettings_strv.py" "$EXTENSION_ID")"
+  run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension"
+
+  installer_log "requesting in-place extension enable if GNOME already knows the extension"
+  run_as_target gnome-extensions enable "$EXTENSION_ID" 2>/dev/null || true
+}
+
+# awt_configure_keybinding — apply the tiling accelerator from AWT_BINDING.
+# On a TTY without an explicit AWT_BINDING the operator may type a replacement
+# accelerator (default <Super>t). Returns: the gsettings exit status.
+awt_configure_keybinding() {
+  if [[ -t 0 && -z "${AWT_BINDING_EXPLICIT:-}" ]]; then
+    local typed
+    read -r -p "Tiling accelerator [${AWT_BINDING}]: " typed || typed=""
+    [[ -n "$typed" ]] && AWT_BINDING="$typed"
+  fi
+  installer_log "applying accelerator $AWT_BINDING for $BINDING_KEY"
+  awt_set_strv "$BINDING_KEY" "$AWT_BINDING"
+}
+
+# awt_configure_app_widths — set per-application preferred tile widths from the
+# comma/space-separated AWT_APP_WIDTHS list (entries of the form name:width).
+# Returns: the gsettings exit status.
+awt_configure_app_widths() {
+  local -a widths=()
+  local entry
+  for entry in ${AWT_APP_WIDTHS//,/ }; do
+    [[ -n "$entry" ]] && widths+=("$entry")
+  done
+  installer_log "applying per-application preferred widths: ${widths[*]:-<none>}"
+  awt_set_strv "$APP_WIDTHS_KEY" "${widths[@]}"
+}
+
+# awt_configure_portrait_stacking — set the portrait minimum tile width from
+# AWT_PORTRAIT_MIN_WIDTH (0 or less means pure single-column stacking).
+# Returns: the gsettings exit status.
+awt_configure_portrait_stacking() {
+  installer_log "applying portrait minimum tile width: $AWT_PORTRAIT_MIN_WIDTH"
+  run_as_target gsettings --schemadir "$TARGET_DIR/schemas" set \
+    "$SCHEMA_ID" "$PORTRAIT_MIN_WIDTH_KEY" "$AWT_PORTRAIT_MIN_WIDTH"
+}

@@ -2,30 +2,59 @@
 #
 # install.sh — Install the Automatic Window Tiling GNOME Shell extension.
 #
-# Copies the extension into the target user's local GNOME Shell extensions
-# directory, compiles its gsettings schema, applies the requested keyboard
-# accelerator, and enables the extension. Works run directly as the desktop
-# user or through sudo (deriving the target from SUDO_USER).
-#
-# Functions:
-#   usage           - print invocation help.
-#   parse_binding   - validate args and echo the chosen accelerator.
-#   gsettings_array - render a single value as a gsettings string array literal.
-#   run_as_target   - run a command in the target user's session environment.
-#   main            - orchestrate the full installation.
+# Deploys the extension into the target user's local GNOME Shell extensions
+# directory, compiles its gsettings schema, and enables it. The core install
+# always runs so tiling works no matter which optional components are selected.
+# Each customizable behavior (the tiling accelerator, per-application preferred
+# widths, and portrait-monitor stacking) is a selectable component routed through
+# the shared installer component framework, so a clean install reproduces the
+# built-in behavior while every part stays fully customizable.
 #
 # Usage:
-#   bash install.sh '<Super>t'              # sudo-free, run as the desktop user
-#   sudo bash install.sh '<Super>t'         # also supported (clean-install chain)
-#   sudo bash install.sh --binding '<Control><Alt>t'
+#   bash install.sh                          # interactive component menu (TTY)
+#   bash install.sh '<Super>t'               # legacy: deploy + default components
+#   bash install.sh --binding '<Control><Alt>t'
+#   bash install.sh --default                # all default-on components, no prompt
+#   bash install.sh --all                    # every component, no prompt
+#   bash install.sh --select keybinding      # only the listed components
+#   bash install.sh --list-components        # machine-readable component list
+#   sudo bash install.sh '<Super>t'          # also supported (clean-install chain)
 set -euo pipefail
 
 EXTENSION_ID="automatic-window-tiling@local"
 SCHEMA_ID="org.gnome.shell.extensions.automatic-window-tiling"
-BINDING_KEY="tile-focused-application-windows"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/lib/installer_logging.sh"
+
+# Separate the legacy binding argument from the component-framework arguments.
+# A single bare positional or `--binding <accel>` selects the tiling accelerator
+# (preserving the interface linux_hotkey_setup calls); everything else is passed
+# through to component_main. Populates FRAMEWORK_ARGS, AWT_BINDING, and
+# AWT_BINDING_EXPLICIT.
+# Arguments: the script's "$@".
+# Returns: 0 on success; 2 when --binding is missing its value.
+parse_binding() {
+  FRAMEWORK_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --binding)
+        [[ $# -ge 2 ]] || { usage >&2; return 2; }
+        AWT_BINDING="$2"; AWT_BINDING_EXPLICIT=1; shift 2 ;;
+      --binding=*)
+        AWT_BINDING="${1#*=}"; AWT_BINDING_EXPLICIT=1; shift ;;
+      --select)
+        FRAMEWORK_ARGS+=("$1" "${2:-}"); shift 2 ;;
+      --)
+        shift ;;
+      -*)
+        FRAMEWORK_ARGS+=("$1"); shift ;;
+      *)
+        AWT_BINDING="$1"; AWT_BINDING_EXPLICIT=1; shift ;;
+    esac
+  done
+  return 0
+}
 
 # Print usage instructions to stdout.
 # Arguments: none.
@@ -33,74 +62,21 @@ source "$SCRIPT_DIR/lib/installer_logging.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  bash install.sh '<Super>t'
-  sudo bash install.sh '<Super>t'
-  sudo bash install.sh --binding '<Control><Alt>t'
+  bash install.sh                      Interactive component menu (TTY)
+  bash install.sh '<Super>t'           Deploy and install default components
+  bash install.sh --binding '<Control><Alt>t'
+  bash install.sh --default            All default-on components, no prompt
+  bash install.sh --all                Every component, no prompt
+  bash install.sh --select a,b,c       Only the listed component ids
+  bash install.sh --list-components    List components as id<TAB>label<TAB>default
 EOF
 }
 
-# Validate command-line arguments and emit the chosen accelerator.
-# Accepts either a single positional accelerator or `--binding <accelerator>`.
-# Arguments: the script's "$@".
-# Output: the accelerator string on stdout.
-# Returns: 0 on success; 1 when the arguments are malformed.
-parse_binding() {
-  if [[ "${1:-}" == "--binding" ]]; then
-    [[ $# -eq 2 ]] || return 1
-    printf '%s\n' "$2"
-    return
-  fi
-
-  [[ $# -eq 1 ]] || return 1
-  printf '%s\n' "$1"
-}
-
-# Render a single value as a gsettings string-array literal, escaping
-# backslashes and single quotes so the result is safe to pass to `gsettings set`.
-# Arguments: $1 - the raw accelerator value.
-# Output: the literal `['<escaped-value>']` on stdout.
-# Returns: 0.
-gsettings_array() {
-  local value="$1"
-  value="${value//\\/\\\\}"
-  value="${value//\'/\\\'}"
-  printf "['%s']\n" "$value"
-}
-
-# Run a command inside the target user's session environment (HOME, D-Bus,
-# display, runtime dir). Executes directly when already that user, otherwise
-# re-enters through `sudo -H -u`.
-# Arguments: $@ - the command and its arguments to execute.
-# Returns: the wrapped command's exit status.
-run_as_target() {
-  local -a environment=(
-    "HOME=$TARGET_HOME"
-    "USER=$TARGET_USER"
-    "LOGNAME=$TARGET_USER"
-    "XDG_RUNTIME_DIR=$RUNTIME_DIR"
-    "DBUS_SESSION_BUS_ADDRESS=$USER_BUS"
-    "DISPLAY=$DISPLAY_VALUE"
-  )
-
-  if [[ "$(id -u)" -eq "$TARGET_UID" ]]; then
-    env "${environment[@]}" "$@"
-  else
-    sudo -H -u "$TARGET_USER" env "${environment[@]}" "$@"
-  fi
-}
-
-# Orchestrate the installation: parse the accelerator, resolve the target user,
-# copy extension files, compile the schema, apply the binding, and enable the
-# extension.
-# Arguments: the script's "$@" (the accelerator specification).
-# Returns: 0 on success; 1 on environment errors; 2 on bad arguments.
-main() {
-  local binding
-  if ! binding="$(parse_binding "$@")" || [[ -z "$binding" ]]; then
-    usage >&2
-    return 2
-  fi
-
+# Resolve the desktop target user and export the session globals the install
+# steps in lib/tiling_setup.sh rely on (TARGET_*, RUNTIME_DIR, USER_BUS,
+# DISPLAY_VALUE, TARGET_DIR).
+# Returns: 0 on success; 1 when the target user cannot be resolved.
+resolve_target() {
   TARGET_USER="${SUDO_USER:-${TARGET_USER:-$USER}}"
   installer_log "resolving target user: $TARGET_USER"
   if [[ -z "$TARGET_USER" || "$TARGET_USER" == "root" ]]; then
@@ -113,47 +89,64 @@ main() {
   RUNTIME_DIR="/run/user/$TARGET_UID"
   USER_BUS="unix:path=$RUNTIME_DIR/bus"
   DISPLAY_VALUE="${DISPLAY:-:0}"
-  local target_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$EXTENSION_ID"
-  installer_log "installing extension files to $target_dir"
+  TARGET_DIR="$TARGET_HOME/.local/share/gnome-shell/extensions/$EXTENSION_ID"
+  export TARGET_USER TARGET_UID TARGET_HOME RUNTIME_DIR USER_BUS \
+    DISPLAY_VALUE TARGET_DIR EXTENSION_ID SCHEMA_ID
+}
 
-  command -v glib-compile-schemas >/dev/null 2>&1 || {
-    printf 'glib-compile-schemas is required (package: libglib2.0-bin).\n' >&2
-    return 1
-  }
+# Load the shared installer component framework from a sibling checkout of
+# linux_installation_scripts_functions, falling back to an on-demand download so
+# a standalone clean install works without that checkout present.
+# Returns: 0 once isc_activate_components is available.
+load_component_framework() {
+  local d
+  for d in "${ISC_FUNCTIONS_DIR:-}" \
+           "$SCRIPT_DIR/../linux_installation_scripts_functions" \
+           "$HOME/projects/linux_installation_scripts_functions"; do
+    [[ -n "$d" && -f "$d/component_loader.sh" ]] && { source "$d/component_loader.sh"; break; }
+  done
+  declare -F isc_load_helpers >/dev/null 2>&1 || \
+    source <(curl -fsSL "https://raw.githubusercontent.com/mikaeltorni/linux_installation_scripts_functions/${ISC_FUNCTIONS_REF:-master}/component_loader.sh")
+  isc_load_helpers
+  isc_activate_components
+}
 
-  install -d "$target_dir/schemas"
-  install -m 0644 \
-    "$SCRIPT_DIR/extension.js" \
-    "$SCRIPT_DIR/layout.js" \
-    "$SCRIPT_DIR/metadata.json" \
-    "$SCRIPT_DIR/windows.js" \
-    "$target_dir/"
-  install -m 0644 \
-    "$SCRIPT_DIR/schemas/org.gnome.shell.extensions.automatic-window-tiling.gschema.xml" \
-    "$target_dir/schemas/"
-  installer_log "compiling gsettings schema"
-  glib-compile-schemas --strict "$target_dir/schemas"
-  if [[ "$(id -u)" -eq 0 ]]; then
-    installer_log "setting extension ownership to $TARGET_USER:$TARGET_USER"
-    chown -R "$TARGET_USER:$TARGET_USER" "$target_dir"
-  fi
+# Orchestrate the installation: parse arguments, resolve the target user, deploy
+# the extension core, then route the customizable components through the shared
+# component framework.
+# Arguments: the script's "$@".
+# Returns: 0 on success; 1 on environment errors; 2 on bad arguments.
+main() {
+  parse_binding "$@" || return $?
 
-  installer_log "applying accelerator for $BINDING_KEY"
-  run_as_target gsettings --schemadir "$target_dir/schemas" set \
-    "$SCHEMA_ID" "$BINDING_KEY" "$(gsettings_array "$binding")"
-  installer_log "ensuring user extensions stay enabled"
-  run_as_target gsettings set org.gnome.shell disable-user-extensions false
+  resolve_target || return 1
 
-  local enabled enabled_with_extension
-  installer_log "adding $EXTENSION_ID to enabled extensions"
-  enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)"
-  enabled_with_extension="$(CURRENT="$enabled" python3 "$SCRIPT_DIR/lib/gsettings_strv.py" "$EXTENSION_ID")"
-  run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension"
+  # Load the shared framework first, then our install steps, so this
+  # repository's self-contained run_as_target/gsettings_array win over the
+  # shared helpers' implementations regardless of source order.
+  load_component_framework
+  # shellcheck source=lib/tiling_setup.sh
+  source "$SCRIPT_DIR/lib/tiling_setup.sh"
+  awt_install_core || return 1
 
-  installer_log "requesting in-place extension enable if GNOME already knows the extension"
-  run_as_target gnome-extensions enable "$EXTENSION_ID" 2>/dev/null || true
-  printf 'Installed %s with binding %s.\n' "$EXTENSION_ID" "$binding"
+  # shellcheck source=installer/components.sh
+  source "$SCRIPT_DIR/installer/components.sh"
+  component_main "${FRAMEWORK_ARGS[@]}"
+
+  printf 'Installed %s.\n' "$EXTENSION_ID"
   printf 'Log out and back in if GNOME Shell has not loaded the extension.\n'
 }
+
+# Listing/help must print only their own output (the master installer parses
+# --list-components); skip the core deploy and completion message for those.
+case "${1:-}" in
+  --list-components|--help|-h)
+    load_component_framework
+    source "$SCRIPT_DIR/lib/tiling_setup.sh"
+    source "$SCRIPT_DIR/installer/components.sh"
+    component_main "$1"
+    exit $?
+    ;;
+esac
 
 main "$@"

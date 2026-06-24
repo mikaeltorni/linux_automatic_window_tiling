@@ -341,23 +341,51 @@ def test_installer_requires_and_applies_binding_argument():
     assert 'parse_binding "$@"' in installer
     assert 'source "$SCRIPT_DIR/lib/installer_logging.sh"' in installer
     assert "installer_log" in installer
-    assert '"--binding"' in installer
-    assert "gsettings_array" in installer
-    assert '"$SCHEMA_ID" "$BINDING_KEY"' in installer
+    assert "--binding" in installer
     assert 'TARGET_USER="${SUDO_USER:-${TARGET_USER:-$USER}}"' in installer
-    assert 'if [[ "$(id -u)" -eq "$TARGET_UID" ]]' in installer
-    assert '"$SCRIPT_DIR/layout.js"' in installer
-    assert '"$SCRIPT_DIR/windows.js"' in installer
+    # The core deploy always runs; customizable behavior is routed through the
+    # shared component framework.
+    assert 'source "$SCRIPT_DIR/lib/tiling_setup.sh"' in installer
+    assert "awt_install_core" in installer
+    assert "isc_activate_components" in installer
+    assert 'source "$SCRIPT_DIR/installer/components.sh"' in installer
+    assert 'component_main "${FRAMEWORK_ARGS[@]}"' in installer
+
+
+def test_setup_library_deploys_and_applies_settings():
+    setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
+
+    assert "gsettings_array" in setup
+    assert '"$SCHEMA_ID" "$key"' in setup
+    assert 'if [[ "$(id -u)" -eq "$TARGET_UID" ]]' in setup
+    assert '"$SCRIPT_DIR/layout.js"' in setup
+    assert '"$SCRIPT_DIR/windows.js"' in setup
+
+
+def test_component_manifest_lists_customizable_features():
+    manifest = (ROOT / "installer" / "components.sh").read_text(encoding="utf-8")
+
+    assert 'ISC_REPO_NAME="linux_automatic_window_tiling"' in manifest
+    for component_id, function in (
+        ("keybinding", "awt_configure_keybinding"),
+        ("per_app_widths", "awt_configure_app_widths"),
+        ("portrait_stacking", "awt_configure_portrait_stacking"),
+    ):
+        assert component_id in manifest
+        assert function in manifest
+    # Every component is default-on so a plain install keeps built-in behavior.
+    assert "|off|" not in manifest
 
 
 def test_installer_logs_meaningful_install_phases():
     installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+    setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
     logging_helper = (ROOT / "lib" / "installer_logging.sh").read_text(
         encoding="utf-8"
     )
 
-    expected_messages = [
-        "resolving target user",
+    assert 'installer_log "resolving target user' in installer
+    expected_setup_messages = [
         "installing extension files",
         "compiling gsettings schema",
         "applying accelerator",
@@ -368,8 +396,8 @@ def test_installer_logs_meaningful_install_phases():
 
     assert "automatic-window-tiling installer:" in logging_helper
     assert "log_step" not in installer
-    for message in expected_messages:
-        assert f'installer_log "{message}' in installer
+    for message in expected_setup_messages:
+        assert f'installer_log "{message}' in setup
 
 
 def test_preferred_width_drives_three_columns_on_4k():
