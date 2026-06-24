@@ -116,8 +116,18 @@ awt_install_core() {
   enabled_with_extension="$(CURRENT="$enabled" python3 "$SCRIPT_DIR/lib/gsettings_strv.py" "$EXTENSION_ID")"
   run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension"
 
-  installer_log "requesting in-place extension enable if GNOME already knows the extension"
-  run_as_target gnome-extensions enable "$EXTENSION_ID" 2>/dev/null || true
+  # Best-effort in-place enable, dispatched in the BACKGROUND so it can never
+  # block the installer. `gnome-extensions enable` is a synchronous D-Bus call
+  # into GNOME Shell; against the session bus this runs under it can hang for
+  # minutes on a fresh install (the running Shell has not loaded the just-copied
+  # extension, or this is not the live session's bus). The enabled-extensions
+  # write above already persists the choice — a live Shell auto-loads it on that
+  # change, otherwise it activates on next login — so fire the live enable
+  # detached and time-boxed purely as a convenience and continue immediately.
+  # stdin/out/err are redirected so the backgrounded job never holds the
+  # installer's pipe open.
+  installer_log "dispatching background in-place extension enable (non-blocking)"
+  run_as_target sh -c 'timeout 5 gnome-extensions enable "$1" >/dev/null 2>&1 </dev/null &' _ "$EXTENSION_ID" || true
 }
 
 # awt_configure_keybinding — apply the tiling accelerator from AWT_BINDING.

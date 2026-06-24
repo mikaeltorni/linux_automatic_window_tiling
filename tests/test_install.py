@@ -486,13 +486,30 @@ def test_installer_logs_meaningful_install_phases():
         "applying accelerator",
         "ensuring user extensions stay enabled",
         "adding $EXTENSION_ID to enabled extensions",
-        "requesting in-place extension enable",
+        "dispatching background in-place extension enable",
     ]
 
     assert "automatic-window-tiling installer:" in logging_helper
     assert "log_step" not in installer
     for message in expected_setup_messages:
         assert f'installer_log "{message}' in setup
+
+
+def test_in_place_enable_is_non_blocking():
+    """The best-effort live enable must never block the installer.
+
+    `gnome-extensions enable` is a synchronous D-Bus call into GNOME Shell and
+    can hang for minutes on a fresh install or an unresponsive session, so it is
+    dispatched in the background (time-boxed, with stdio detached). The extension
+    is already persisted in enabled-extensions and loads on next login.
+    """
+    setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
+
+    assert "timeout 5 gnome-extensions enable" in setup
+    # Must be backgrounded with stdio detached so it cannot hold the pipe open.
+    assert ">/dev/null 2>&1 </dev/null &" in setup
+    # And must not run a synchronous foreground enable.
+    assert "run_as_target gnome-extensions enable" not in setup
 
 
 def test_preferred_width_drives_three_columns_on_4k():
