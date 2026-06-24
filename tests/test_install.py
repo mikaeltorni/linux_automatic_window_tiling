@@ -335,7 +335,102 @@ def test_schema_has_no_hard_coded_binding():
     assert "&lt;Super&gt;t" not in schema
 
 
-def test_installer_requires_and_applies_binding_argument():
+def test_schema_exposes_customizable_keys():
+    schema = (
+        ROOT
+        / "schemas"
+        / "org.gnome.shell.extensions.automatic-window-tiling.gschema.xml"
+    ).read_text(encoding="utf-8")
+
+    assert '<key name="application-preferred-widths"' in schema
+    assert "<default>['kitty:1300']</default>" in schema
+    assert '<key name="portrait-minimum-tile-width"' in schema
+    assert "<default>1080</default>" in schema
+
+
+def test_parse_application_preferred_widths_skips_malformed_entries():
+    source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    function_source = _extract_function(source, "parseApplicationPreferredWidths")
+    result = _run_javascript(
+        function_source,
+        """
+console.log(JSON.stringify(parseApplicationPreferredWidths([
+  'kitty:1300',
+  'firefox:900',
+  'nocolon',
+  'zero:0',
+  'negative:-5',
+  'bad:width',
+])));
+""",
+    )
+
+    assert result == [
+        {"match": "kitty", "preferredWidth": 1300},
+        {"match": "firefox", "preferredWidth": 900},
+    ]
+
+
+def test_get_application_preferred_width_matches_identifier_suffix():
+    source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    function_source = _extract_function(source, "getApplicationPreferredWidth")
+    result = _run_javascript(
+        function_source,
+        """
+const matchers = [{ match: 'kitty', preferredWidth: 1300 }];
+console.log(JSON.stringify({
+  prefixed: getApplicationPreferredWidth('wm-class:kitty', matchers),
+  bare: getApplicationPreferredWidth('kitty', matchers),
+  other: getApplicationPreferredWidth('wm-class:firefox', matchers),
+  nonString: getApplicationPreferredWidth(null, matchers),
+}));
+""",
+    )
+
+    assert result == {
+        "prefixed": 1300,
+        "bare": 1300,
+        "other": None,
+        "nonString": None,
+    }
+
+
+def _choose_grid_portrait(window_count, width, height, portrait_min_width):
+    """Run chooseGrid with an explicit portrait minimum tile width."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is required to evaluate chooseGrid")
+
+    source = (ROOT / "layout.js").read_text(encoding="utf-8")
+    function_source = _extract_function(source, "chooseGrid")
+    script = f"""
+{function_source}
+console.log(JSON.stringify(chooseGrid(
+    {window_count},
+    {{ x: 0, y: 0, width: {width}, height: {height} }},
+    null,
+    {portrait_min_width},
+)));
+"""
+    completed = subprocess.run(
+        [node, "-e", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(completed.stdout.strip())
+
+
+def test_portrait_minimum_width_is_configurable():
+    # A smaller minimum packs more columns side by side on a portrait monitor.
+    assert _choose_grid_portrait(3, 2160, 3840, 700) == {"rows": 1, "columns": 3}
+    # A non-positive minimum forces pure single-column vertical stacking.
+    assert _choose_grid_portrait(3, 2160, 3840, 0) == {"rows": 3, "columns": 1}
+    # The default 1080 still yields two columns on a 2160px-wide portrait monitor.
+    assert _choose_grid_portrait(2, 2160, 3840, 1080) == {"rows": 1, "columns": 2}
+
+
+def test_installer_parses_binding_and_routes_through_component_framework():
     installer = (ROOT / "install.sh").read_text(encoding="utf-8")
 
     assert 'parse_binding "$@"' in installer
