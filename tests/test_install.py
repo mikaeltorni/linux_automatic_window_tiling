@@ -447,6 +447,22 @@ def test_installer_parses_binding_and_routes_through_component_framework():
     assert 'component_main "${FRAMEWORK_ARGS[@]}"' in installer
 
 
+def test_bare_binding_runs_default_components_non_interactively():
+    """A delegated bare-binding call must not drop into the interactive menu.
+
+    linux_hotkey_setup invokes this installer with only the tiling binding and no
+    component selection. Without a selection flag, component_main opens its TTY
+    submenu and blocks on keyboard input, hanging the whole master run. A bare or
+    explicit binding with no framework selection must therefore default to
+    --default and install non-interactively.
+    """
+    installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+
+    assert "AWT_BINDING_EXPLICIT" in installer
+    assert "${#FRAMEWORK_ARGS[@]} -eq 0" in installer
+    assert "FRAMEWORK_ARGS=(--default)" in installer
+
+
 def test_setup_library_deploys_and_applies_settings():
     setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
 

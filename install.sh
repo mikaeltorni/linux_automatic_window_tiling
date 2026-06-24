@@ -119,6 +119,17 @@ load_component_framework() {
 main() {
   parse_binding "$@" || return $?
 
+  # A delegated invocation (linux_hotkey_setup) passes only the tiling binding
+  # and no component selection. With no selection flag, component_main drops into
+  # its interactive submenu on a TTY (stdin is the parent installer's terminal)
+  # and blocks forever, hanging the whole master run. The documented contract for
+  # a bare binding is "deploy and install default components", so when a binding
+  # was given explicitly and no framework selection was supplied, run defaults
+  # non-interactively.
+  if [[ -n "${AWT_BINDING_EXPLICIT:-}" && ${#FRAMEWORK_ARGS[@]} -eq 0 ]]; then
+    FRAMEWORK_ARGS=(--default)
+  fi
+
   resolve_target || return 1
 
   # Load the shared framework first, then our install steps, so this
