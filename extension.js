@@ -29,7 +29,13 @@ import {
 } from './windows.js';
 
 const TILE_KEY = 'tile-focused-application-windows';
+const APP_WIDTHS_KEY = 'application-preferred-widths';
+const PORTRAIT_MIN_WIDTH_KEY = 'portrait-minimum-tile-width';
 const LOG_PREFIX = 'automatic-window-tiling';
+
+// Live extension settings, populated on enable() so the keybinding handler can
+// read the user-customized per-application widths and portrait packing minimum.
+let extensionSettings = null;
 
 /**
  * Centralized logging helper.
@@ -68,14 +74,45 @@ const log = {
   },
 };
 
-// Optional per-application preferred widths. The value controls grid density,
-// but is not a hard size cap: when fewer windows are present, their cells
-// expand to consume the full work area. Matching is done on the identifier
-// suffix so any identity source (wm-class, gtk-application-id, ...) resolving
-// to the same application name is covered.
-const APPLICATION_PREFERRED_WIDTHS = [
-  { match: 'kitty', preferredWidth: 1300 },
-];
+// Default per-application preferred widths, used when the gsettings key is
+// unavailable (for example outside the Shell during tests). The installer seeds
+// the same default into the `application-preferred-widths` schema key, where it
+// becomes fully user-customizable. The value controls grid density but is not a
+// hard size cap: when fewer windows are present, their cells expand to consume
+// the full work area.
+const DEFAULT_APPLICATION_PREFERRED_WIDTHS = ['kitty:1300'];
+
+/**
+ * Parse `application-preferred-widths` entries into matchers.
+ *
+ * Each entry has the form `application-name:width-in-pixels`. Malformed entries
+ * (missing colon, non-positive or non-numeric width) are skipped so a bad
+ * customization never breaks tiling.
+ *
+ * @param {string[]} entries - Raw `name:width` strings from gsettings.
+ * @returns {Array<{match: string, preferredWidth: number}>} Parsed matchers.
+ */
+function parseApplicationPreferredWidths(entries) {
+  const matchers = [];
+  if (!Array.isArray(entries)) {
+    return matchers;
+  }
+  for (const entry of entries) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const separator = entry.lastIndexOf(':');
+    if (separator <= 0) {
+      continue;
+    }
+    const match = entry.slice(0, separator).trim();
+    const preferredWidth = Number.parseInt(entry.slice(separator + 1), 10);
+    if (match && Number.isFinite(preferredWidth) && preferredWidth > 0) {
+      matchers.push({ match, preferredWidth });
+    }
+  }
+  return matchers;
+}
 
 /**
  * Look up the configured layout width for an application identifier.
@@ -85,17 +122,19 @@ const APPLICATION_PREFERRED_WIDTHS = [
  * the configured application names.
  *
  * @param {string} applicationId - Identifier from getWindowApplicationId.
+ * @param {Array<{match: string, preferredWidth: number}>} matchers - Parsed
+ *   per-application width preferences.
  * @returns {number|null} The preferred tile width, or null when no preference
  *   is configured or the input is not a string.
  */
-function getApplicationPreferredWidth(applicationId) {
+function getApplicationPreferredWidth(applicationId, matchers) {
   if (typeof applicationId !== 'string') {
     return null;
   }
   const name = applicationId.includes(':')
     ? applicationId.slice(applicationId.indexOf(':') + 1)
     : applicationId;
-  for (const preference of APPLICATION_PREFERRED_WIDTHS) {
+  for (const preference of matchers) {
     if (name === preference.match) {
       return preference.preferredWidth;
     }
@@ -122,6 +161,12 @@ function tileFocusedApplicationWindows() {
   }
 
   try {
+    const widthMatchers = parseApplicationPreferredWidths(
+      extensionSettings ? extensionSettings.get_strv(APP_WIDTHS_KEY) : DEFAULT_APPLICATION_PREFERRED_WIDTHS,
+    );
+    const portraitMinimumTileWidth = extensionSettings
+      ? extensionSettings.get_int(PORTRAIT_MIN_WIDTH_KEY)
+      : 1080;
     const workspace = global.workspace_manager.get_active_workspace();
     const monitorIndex = focusedWindow.get_monitor();
     const workArea = workspace.get_work_area_for_monitor(monitorIndex);
@@ -139,9 +184,9 @@ function tileFocusedApplicationWindows() {
       return;
     }
 
-    const preferredWidth = getApplicationPreferredWidth(applicationId);
+    const preferredWidth = getApplicationPreferredWidth(applicationId, widthMatchers);
     log.info(`applicationId=${applicationId} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`);
-    const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth);
+    const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileWidth);
     for (let index = 0; index < windows.length; index++) {
       const win = windows[index];
       const tile = calculateTileRect(index, rows, columns, workArea);
@@ -173,6 +218,7 @@ export default class AutomaticWindowTilingExtension extends Extension {
    */
   enable() {
     this._settings = this.getSettings();
+    extensionSettings = this._settings;
     Main.wm.addKeybinding(
       TILE_KEY,
       this._settings,
@@ -189,6 +235,7 @@ export default class AutomaticWindowTilingExtension extends Extension {
    */
   disable() {
     Main.wm.removeKeybinding(TILE_KEY);
+    extensionSettings = null;
     this._settings = null;
     log.info('disabled; tiling keybinding removed');
   }

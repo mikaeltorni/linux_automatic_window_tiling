@@ -5,5 +5,25 @@
       <default>[]</default>
       <summary>Tile focused application windows on the current workspace and monitor</summary>
     </key>
+    <key name="application-preferred-widths" type="as">
+      <default>['kitty:1300']</default>
+      <summary>Per-application preferred tile widths</summary>
+      <description>
+        Density hints of the form "application-name:width-in-pixels". The width
+        controls how many grid columns an application targets on wide monitors;
+        it is not a hard cap, so fewer windows still expand to fill the work
+        area. An empty list disables all per-application width preferences.
+      </description>
+    </key>
+    <key name="portrait-minimum-tile-width" type="i">
+      <default>1080</default>
+      <summary>Minimum horizontal tile width on portrait monitors</summary>
+      <description>
+        On portrait monitors a column is never made narrower than this many
+        pixels, which caps how many columns fit side by side before windows wrap
+        onto further rows. A value of 0 or less keeps portrait monitors in a
+        single column (pure vertical stacking).
+      </description>
+    </key>
   </schema>
 </schemalist>

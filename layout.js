@@ -16,21 +16,25 @@
  * @param {{x: number, y: number, width: number, height: number}} workArea -
  *   Available work area in physical pixels.
  * @param {?number} preferredWidth - Optional target cell width, or null.
+ * @param {number} [portraitMinimumTileWidth=1080] - Minimum horizontal tile
+ *   width (physical pixels) used to pack columns on portrait monitors. A value
+ *   of 0 or less keeps portrait monitors in a single column.
  * @returns {{rows: number, columns: number}} The chosen grid dimensions.
  */
-export function chooseGrid(windowCount, workArea, preferredWidth) {
+export function chooseGrid(windowCount, workArea, preferredWidth, portraitMinimumTileWidth = 1080) {
   // Portrait monitors stack windows vertically but pack as many columns
   // side by side as fit at the minimum horizontal tile width, then wrap the
   // remaining windows onto further rows. On a 2160px-wide portrait display two
   // 1080px columns fit, so windows sit next to each other and larger counts
   // grow into a sensible balanced grid instead of one tall single column. The
   // per-application preferred width is a density hint for wide monitors only;
-  // portrait packing is governed solely by this hard minimum.
+  // portrait packing is governed solely by this configurable minimum.
   if (workArea.height > workArea.width) {
     // Minimum horizontal tile width (physical pixels): a column is never made
     // narrower than this, which caps how many columns a portrait monitor holds.
-    const MIN_TILE_WIDTH = 1080;
-    const maxColumns = Math.max(1, Math.floor(workArea.width / MIN_TILE_WIDTH));
+    // A non-positive minimum forces a single, full-width column (pure stacking).
+    const minTileWidth = portraitMinimumTileWidth > 0 ? portraitMinimumTileWidth : workArea.width;
+    const maxColumns = Math.max(1, Math.floor(workArea.width / minTileWidth));
     const columns = Math.min(windowCount, maxColumns);
     const rows = Math.ceil(windowCount / columns);
     return { rows, columns };

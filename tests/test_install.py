@@ -122,7 +122,8 @@ def test_extension_filters_by_application_workspace_and_monitor():
     assert "getApplicationPreferredWidth" in source
     assert "from './layout.js'" in source
     assert "from './windows.js'" in source
-    assert "preferredWidth: 1300" in source
+    assert "parseApplicationPreferredWidths" in source
+    assert "'kitty:1300'" in source
     assert "if (windowCount === 2)" in layout_source
     assert "return { rows: 1, columns: 2 };" in layout_source
     assert "workArea.width >= workArea.height" not in layout_source
