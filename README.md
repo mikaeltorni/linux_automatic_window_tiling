@@ -127,6 +127,25 @@ The master `installation_scripts` repository clones this project before
 `linux_hotkey_setup`, while installation is delegated to the hotkey setup so
 the binding remains explicitly owned there.
 
+## Detect, reconfigure, and uninstall
+
+This installer tracks what it has installed and can re-apply or remove it, so you
+can refresh configuration after a repo update or cleanly back a feature out.
+
+```bash
+bash install.sh --detect            # show each component as installed|absent
+bash install.sh --reconfigure a,b   # re-apply (idempotent) these component ids
+bash install.sh --uninstall a,b     # uninstall these component ids
+```
+
+In the interactive menu (run `bash install.sh` on a terminal, or via the master
+installer), already-installed components show a green `✓`. Select one with
+**space** to **reconfigure** it (`~`), press **`u`** to mark it for **uninstall**
+(`✗`), or press **`r`** to reconfigure every installed component at once. Detection
+uses a live check where deterministic and otherwise an install receipt under
+`${XDG_STATE_HOME:-~/.local/state}/isc/receipts/`; a component without a reversal
+step simply clears that receipt on uninstall.
+
 ## Disclaimer
 
 This software is provided under the MIT License on an **“as is”** basis, without warranties of any kind. To the maximum extent permitted by applicable law, the authors and copyright holders shall not be liable for any claims, damages, losses, or other liability arising from the use of this software.

@@ -151,11 +151,15 @@ main() {
 # Listing/help must print only their own output (the master installer parses
 # --list-components); skip the core deploy and completion message for those.
 case "${1:-}" in
-  --list-components|--help|-h)
+  --list-components|--detect|--help|-h|--uninstall|--uninstall=*)
     load_component_framework
     source "$SCRIPT_DIR/lib/tiling_setup.sh"
     source "$SCRIPT_DIR/installer/components.sh"
-    component_main "$1"
+    # --detect/--uninstall reach into the target user's gsettings via
+    # run_as_target, so resolve the session globals first (best-effort; harmless
+    # for the pure --list-components/--help output).
+    resolve_target || true
+    component_main "$@"
     exit $?
     ;;
 esac

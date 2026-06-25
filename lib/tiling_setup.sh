@@ -164,3 +164,37 @@ awt_configure_portrait_stacking() {
   run_as_target gsettings --schemadir "$TARGET_DIR/schemas" set \
     "$SCHEMA_ID" "$PORTRAIT_MIN_WIDTH_KEY" "$AWT_PORTRAIT_MIN_WIDTH"
 }
+
+###############################################################################
+# Detection and uninstall (component lifecycle)
+###############################################################################
+# Each component writes one key on the bundled extension's GSettings schema. A
+# component is "installed" when that schema is present (so the key applies);
+# uninstalling resets the key to the schema default. The mandatory extension
+# deploy/enable is core and is never removed by a component uninstall.
+
+# awt_schema_dir: resolve the deployed extension schema dir without relying on
+# globals that are only set during the core install pass.
+awt_schema_dir() {
+  printf '%s\n' "${TARGET_HOME:-$HOME}/.local/share/gnome-shell/extensions/$EXTENSION_ID/schemas"
+}
+
+# awt_schema_present: true when the bundled extension schema is readable.
+awt_schema_present() {
+  run_as_target gsettings --schemadir "$(awt_schema_dir)" \
+    get "$SCHEMA_ID" "$BINDING_KEY" >/dev/null 2>&1
+}
+
+# awt_reset: reset one extension schema key to its default. Best-effort.
+awt_reset() {
+  run_as_target gsettings --schemadir "$(awt_schema_dir)" \
+    reset "$SCHEMA_ID" "$1" 2>/dev/null || true
+}
+
+detect_awt_keybinding()        { awt_schema_present; }
+detect_awt_app_widths()        { awt_schema_present; }
+detect_awt_portrait_stacking() { awt_schema_present; }
+
+uninstall_awt_keybinding()        { installer_log "resetting $BINDING_KEY";          awt_reset "$BINDING_KEY"; }
+uninstall_awt_app_widths()        { installer_log "resetting $APP_WIDTHS_KEY";        awt_reset "$APP_WIDTHS_KEY"; }
+uninstall_awt_portrait_stacking() { installer_log "resetting $PORTRAIT_MIN_WIDTH_KEY"; awt_reset "$PORTRAIT_MIN_WIDTH_KEY"; }
