@@ -131,10 +131,14 @@ awt_install_core() {
 }
 
 # awt_configure_keybinding — apply the tiling accelerator from AWT_BINDING.
-# On a TTY without an explicit AWT_BINDING the operator may type a replacement
-# accelerator (default <Super>t). Returns: the gsettings exit status.
+# Unless the accelerator was pinned explicitly (AWT_BINDING_EXPLICIT, e.g. a
+# scripted run), offer the shared interactive press-to-capture UI so the operator
+# can press their own hotkey (default <Super>t). Falls back to the shared helper's
+# non-interactive default off a TTY. Returns: the gsettings exit status.
 awt_configure_keybinding() {
-  if [[ -t 0 && -z "${AWT_BINDING_EXPLICIT:-}" ]]; then
+  if [[ -z "${AWT_BINDING_EXPLICIT:-}" ]] && declare -F isc_capture_hotkey >/dev/null 2>&1; then
+    AWT_BINDING="$(isc_capture_hotkey TILING_HOTKEY "$AWT_BINDING" "automatic window tiling")"
+  elif [[ -t 0 && -z "${AWT_BINDING_EXPLICIT:-}" ]]; then
     local typed
     read -r -p "Tiling accelerator [${AWT_BINDING}]: " typed || typed=""
     [[ -n "$typed" ]] && AWT_BINDING="$typed"
