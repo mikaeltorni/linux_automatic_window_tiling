@@ -151,7 +151,7 @@ main() {
 # Listing/help must print only their own output (the master installer parses
 # --list-components); skip the core deploy and completion message for those.
 case "${1:-}" in
-  --list-components|--detect|--help|-h|--uninstall|--uninstall=*)
+  --list-components|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*)
     load_component_framework
     source "$SCRIPT_DIR/lib/tiling_setup.sh"
     source "$SCRIPT_DIR/installer/components.sh"
