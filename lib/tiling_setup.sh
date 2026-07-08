@@ -14,7 +14,7 @@
 #   awt_install_core         - deploy, compile, and enable the extension (always).
 #   awt_configure_keybinding - apply the tiling accelerator (AWT_BINDING).
 #   awt_configure_app_widths - set per-application preferred widths (AWT_APP_WIDTHS).
-#   awt_configure_portrait_stacking - set the portrait minimum tile width.
+#   awt_configure_portrait_stacking - set the portrait minimum tile height.
 #
 # Required globals (exported by install.sh before sourcing this file):
 #   SCRIPT_DIR TARGET_USER TARGET_UID TARGET_HOME RUNTIME_DIR USER_BUS
@@ -24,13 +24,13 @@ EXTENSION_ID="${EXTENSION_ID:-automatic-window-tiling@local}"
 SCHEMA_ID="${SCHEMA_ID:-org.gnome.shell.extensions.automatic-window-tiling}"
 BINDING_KEY="tile-focused-application-windows"
 APP_WIDTHS_KEY="application-preferred-widths"
-PORTRAIT_MIN_WIDTH_KEY="portrait-minimum-tile-width"
+PORTRAIT_MIN_HEIGHT_KEY="portrait-minimum-tile-height"
 
 # Defaults preserve the extension's built-in behavior. Override via the
 # environment to customize a clean or scripted install.
 AWT_BINDING="${AWT_BINDING:-<Super>t}"
 AWT_APP_WIDTHS="${AWT_APP_WIDTHS:-kitty:1300}"
-AWT_PORTRAIT_MIN_WIDTH="${AWT_PORTRAIT_MIN_WIDTH:-1080}"
+AWT_PORTRAIT_MIN_HEIGHT="${AWT_PORTRAIT_MIN_HEIGHT:-0}"
 
 # Run a command inside the target user's session environment (HOME, D-Bus,
 # display, runtime dir). Executes directly when already that user, otherwise
@@ -160,13 +160,13 @@ awt_configure_app_widths() {
   awt_set_strv "$APP_WIDTHS_KEY" "${widths[@]}"
 }
 
-# awt_configure_portrait_stacking — set the portrait minimum tile width from
-# AWT_PORTRAIT_MIN_WIDTH (0 or less means pure single-column stacking).
+# awt_configure_portrait_stacking — set the portrait minimum tile height from
+# AWT_PORTRAIT_MIN_HEIGHT (0 or less means pure single-column vertical stacking).
 # Returns: the gsettings exit status.
 awt_configure_portrait_stacking() {
-  installer_log "applying portrait minimum tile width: $AWT_PORTRAIT_MIN_WIDTH"
+  installer_log "applying portrait minimum tile height: $AWT_PORTRAIT_MIN_HEIGHT"
   run_as_target gsettings --schemadir "$TARGET_DIR/schemas" set \
-    "$SCHEMA_ID" "$PORTRAIT_MIN_WIDTH_KEY" "$AWT_PORTRAIT_MIN_WIDTH"
+    "$SCHEMA_ID" "$PORTRAIT_MIN_HEIGHT_KEY" "$AWT_PORTRAIT_MIN_HEIGHT"
 }
 
 ###############################################################################
@@ -201,4 +201,4 @@ detect_awt_portrait_stacking() { awt_schema_present; }
 
 uninstall_awt_keybinding()        { installer_log "resetting $BINDING_KEY";          awt_reset "$BINDING_KEY"; }
 uninstall_awt_app_widths()        { installer_log "resetting $APP_WIDTHS_KEY";        awt_reset "$APP_WIDTHS_KEY"; }
-uninstall_awt_portrait_stacking() { installer_log "resetting $PORTRAIT_MIN_WIDTH_KEY"; awt_reset "$PORTRAIT_MIN_WIDTH_KEY"; }
+uninstall_awt_portrait_stacking() { installer_log "resetting $PORTRAIT_MIN_HEIGHT_KEY"; awt_reset "$PORTRAIT_MIN_HEIGHT_KEY"; }

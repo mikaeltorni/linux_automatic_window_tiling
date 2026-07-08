@@ -15,14 +15,16 @@
         area. An empty list disables all per-application width preferences.
       </description>
     </key>
-    <key name="portrait-minimum-tile-width" type="i">
-      <default>1080</default>
-      <summary>Minimum horizontal tile width on portrait monitors</summary>
+    <key name="portrait-minimum-tile-height" type="i">
+      <default>0</default>
+      <summary>Minimum tile height on portrait monitors</summary>
       <description>
-        On portrait monitors a column is never made narrower than this many
-        pixels, which caps how many columns fit side by side before windows wrap
-        onto further rows. A value of 0 or less keeps portrait monitors in a
-        single column (pure vertical stacking).
+        On portrait monitors windows stack top to bottom in a single full-height
+        column. A non-positive value (the default) keeps every window in that one
+        column; a positive value caps how many rows stack before the next window
+        wraps onto a column to the right, so a column never drops below this many
+        pixels tall. This trades pure vertical stacking for side-by-side columns
+        once there are many windows on a tall monitor.
       </description>
     </key>
   </schema>

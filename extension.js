@@ -30,7 +30,7 @@ import {
 
 const TILE_KEY = 'tile-focused-application-windows';
 const APP_WIDTHS_KEY = 'application-preferred-widths';
-const PORTRAIT_MIN_WIDTH_KEY = 'portrait-minimum-tile-width';
+const PORTRAIT_MIN_HEIGHT_KEY = 'portrait-minimum-tile-height';
 const LOG_PREFIX = 'automatic-window-tiling';
 
 // Live extension settings, populated on enable() so the keybinding handler can
@@ -164,8 +164,8 @@ function tileFocusedApplicationWindows() {
     const widthMatchers = parseApplicationPreferredWidths(
       extensionSettings ? extensionSettings.get_strv(APP_WIDTHS_KEY) : DEFAULT_APPLICATION_PREFERRED_WIDTHS,
     );
-    const portraitMinimumTileWidth = extensionSettings
-      ? extensionSettings.get_int(PORTRAIT_MIN_WIDTH_KEY)
+    const portraitMinimumTileHeight = extensionSettings
+      ? extensionSettings.get_int(PORTRAIT_MIN_HEIGHT_KEY)
       : 1080;
     const workspace = global.workspace_manager.get_active_workspace();
     const monitorIndex = focusedWindow.get_monitor();
@@ -186,7 +186,7 @@ function tileFocusedApplicationWindows() {
 
     const preferredWidth = getApplicationPreferredWidth(applicationId, widthMatchers);
     log.info(`applicationId=${applicationId} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`);
-    const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileWidth);
+    const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
     for (let index = 0; index < windows.length; index++) {
       const win = windows[index];
       const tile = calculateTileRect(index, rows, columns, workArea);

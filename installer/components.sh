@@ -19,5 +19,5 @@ ISC_REPO_LABEL="Automatic same-application window tiling"
 ISC_COMPONENTS=(
   "keybinding|Tiling accelerator (default <Super>t)|on|awt_configure_keybinding|detect_awt_keybinding|uninstall_awt_keybinding"
   "per_app_widths|Per-application preferred tile widths (kitty:1300)|on|awt_configure_app_widths|detect_awt_app_widths|uninstall_awt_app_widths"
-  "portrait_stacking|Portrait monitor vertical stacking minimum width|on|awt_configure_portrait_stacking|detect_awt_portrait_stacking|uninstall_awt_portrait_stacking"
+  "portrait_stacking|Portrait monitor vertical stacking minimum height|on|awt_configure_portrait_stacking|detect_awt_portrait_stacking|uninstall_awt_portrait_stacking"
 )

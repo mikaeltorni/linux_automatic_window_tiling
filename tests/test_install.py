@@ -344,8 +344,8 @@ def test_schema_exposes_customizable_keys():
 
     assert '<key name="application-preferred-widths"' in schema
     assert "<default>['kitty:1300']</default>" in schema
-    assert '<key name="portrait-minimum-tile-width"' in schema
-    assert "<default>1080</default>" in schema
+    assert '<key name="portrait-minimum-tile-height"' in schema
+    assert "<default>0</default>" in schema
 
 
 def test_parse_application_preferred_widths_skips_malformed_entries():
@@ -395,12 +395,17 @@ console.log(JSON.stringify({
     }
 
 
-def _choose_grid_portrait(window_count, width, height, portrait_min_width):
-    """Run chooseGrid with an explicit portrait minimum tile width."""
+def _choose_grid_portrait(window_count, width, height, portrait_min_height):
+    """Run chooseGrid on a portrait work area with an explicit minimum tile height.
+
+    ``None`` is serialized as the JS ``null`` literal; a non-positive height is
+    passed through to mean "no minimum" so the windows stack in one column.
+    """
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is required to evaluate chooseGrid")
 
+    height_arg = "null" if portrait_min_height is None else str(portrait_min_height)
     source = (ROOT / "layout.js").read_text(encoding="utf-8")
     function_source = _extract_function(source, "chooseGrid")
     script = f"""
@@ -409,7 +414,7 @@ console.log(JSON.stringify(chooseGrid(
     {window_count},
     {{ x: 0, y: 0, width: {width}, height: {height} }},
     null,
-    {portrait_min_width},
+    {height_arg},
 )));
 """
     completed = subprocess.run(
@@ -421,13 +426,16 @@ console.log(JSON.stringify(chooseGrid(
     return json.loads(completed.stdout.strip())
 
 
-def test_portrait_minimum_width_is_configurable():
-    # A smaller minimum packs more columns side by side on a portrait monitor.
-    assert _choose_grid_portrait(3, 2160, 3840, 700) == {"rows": 1, "columns": 3}
-    # A non-positive minimum forces pure single-column vertical stacking.
+def test_portrait_minimum_height_is_configurable():
+    # The default (non-positive minimum) keeps every window in a single,
+    # full-height column stacked top to bottom on a portrait monitor.
     assert _choose_grid_portrait(3, 2160, 3840, 0) == {"rows": 3, "columns": 1}
-    # The default 1080 still yields two columns on a 2160px-wide portrait monitor.
-    assert _choose_grid_portrait(2, 2160, 3840, 1080) == {"rows": 1, "columns": 2}
+    # Two windows stack as top and bottom, never side by side.
+    assert _choose_grid_portrait(2, 2160, 3840, None) == {"rows": 2, "columns": 1}
+    # A positive minimum wraps windows into side-by-side columns once a column
+    # would fall below that height: 1080px fits 3 rows on a 3840px-tall monitor,
+    # so the 4th window wraps to the right.
+    assert _choose_grid_portrait(4, 2160, 3840, 1080) == {"rows": 3, "columns": 2}
 
 
 def test_installer_parses_binding_and_routes_through_component_framework():
@@ -556,27 +564,30 @@ def test_two_tiles_expand_to_fill_available_width():
     assert left["width"] + right["width"] == 3840
 
 
-def test_portrait_monitor_packs_columns_at_minimum_width():
-    # On a 2160px-wide portrait monitor two 1080px columns fit, so the first two
-    # windows sit side by side. The per-application preferred width does not
-    # tighten portrait packing.
-    assert _choose_grid(2, 2160, 3840, 1300) == {"rows": 1, "columns": 2}
-    assert _choose_grid(2, 2160, 3840, None) == {"rows": 1, "columns": 2}
-    # A third window wraps onto a second row within the two-column grid.
-    assert _choose_grid(3, 2160, 3840, 1300) == {"rows": 2, "columns": 2}
+def test_portrait_monitor_stacks_vertically_by_default():
+    # On a portrait monitor windows stack top to bottom in one full-height
+    # column; they are never placed side by side unless a positive minimum is set.
+    assert _choose_grid_portrait(2, 2160, 3840, None) == {"rows": 2, "columns": 1}
+    assert _choose_grid_portrait(3, 2160, 3840, None) == {"rows": 3, "columns": 1}
+    # A third window continues below rather than being cut in half: three equal
+    # rows, no side-by-side wrap.
+    assert _choose_grid_portrait(3, 2160, 3840, 0) == {"rows": 3, "columns": 1}
 
 
-def test_portrait_monitor_grows_into_sensible_grid_for_many_windows():
-    # Beyond four windows the two-column grid keeps growing rows rather than
-    # collapsing into a single tall column.
-    assert _choose_grid(4, 2160, 3840, None) == {"rows": 2, "columns": 2}
-    assert _choose_grid(5, 2160, 3840, None) == {"rows": 3, "columns": 2}
-    assert _choose_grid(6, 2160, 3840, None) == {"rows": 3, "columns": 2}
+def test_portrait_monitor_wraps_into_columns_only_with_positive_minimum():
+    # With a positive minimum, a column wraps to the right once it would drop
+    # below that height, so many windows stay usable instead of becoming slivers.
+    assert _choose_grid_portrait(4, 2160, 3840, 1080) == {"rows": 3, "columns": 2}
+    assert _choose_grid_portrait(5, 2160, 3840, 1080) == {"rows": 3, "columns": 2}
+    assert _choose_grid_portrait(6, 2160, 3840, 1080) == {"rows": 3, "columns": 2}
 
 
 def test_narrow_portrait_monitor_keeps_single_column():
-    # A portrait monitor too narrow for two 1080px columns stays single-column.
-    assert _choose_grid(2, 1200, 1920, None) == {"rows": 2, "columns": 1}
+    # With no minimum a narrow portrait monitor stacks windows vertically.
+    assert _choose_grid_portrait(2, 1200, 1920, None) == {"rows": 2, "columns": 1}
+    # A positive minimum taller than the monitor allows only one row, so the
+    # windows fall back to side by side rather than being squeezed in height.
+    assert _choose_grid_portrait(2, 1200, 1920, 1080) == {"rows": 1, "columns": 2}
 
 
 def test_without_preferred_width_falls_back_to_aspect_grid():

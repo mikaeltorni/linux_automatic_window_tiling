@@ -29,6 +29,7 @@ See the full cross-repository map in
 - One window fills the monitor work area.
 - Two windows tile left/right.
 - Four windows use a 2x2 grid.
+- On a portrait (taller-than-wide) monitor, windows stack top-to-bottom in a single full-width column (two windows are top and bottom, a third continues below and is never cut in half); a configurable minimum tile height keeps a window usable before the next one wraps into a column to the right.
 - Other counts use a balanced calculated grid.
 - Kitty uses a 1300px preferred width to choose grid density on wide monitors,
   but tiled windows always expand to fill their complete grid cells.
@@ -74,11 +75,13 @@ customizable without editing the extension source:
 | --- | --- | --- | --- |
 | `keybinding` | `tile-focused-application-windows` | `AWT_BINDING` | `<Super>t` |
 | `per_app_widths` | `application-preferred-widths` | `AWT_APP_WIDTHS` | `kitty:1300` |
-| `portrait_stacking` | `portrait-minimum-tile-width` | `AWT_PORTRAIT_MIN_WIDTH` | `1080` |
+| `portrait_stacking` | `portrait-minimum-tile-height` | `AWT_PORTRAIT_MIN_HEIGHT` | `0` |
 
 `AWT_APP_WIDTHS` is a comma- or space-separated list of `name:width` entries.
-A `portrait-minimum-tile-width` of `0` or less keeps portrait monitors in a
-single, full-width column (pure vertical stacking). On a TTY the `keybinding`
+A `portrait-minimum-tile-height` of `0` (the default) keeps portrait monitors in a
+single, full-height column (pure vertical stacking, top to bottom). Set a positive
+value (for example `1080`) to wrap windows into side-by-side columns once a column
+would fall below that height, keeping many windows usable on a tall monitor. On a TTY the `keybinding`
 component also prompts for the accelerator, defaulting to `<Super>t`.
 
 The installer can run directly as the desktop user or through `sudo`. When run
