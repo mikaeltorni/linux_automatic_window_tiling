@@ -25,3 +25,20 @@ complete setup.
 
 Keep installation steps idempotent and verify the clean-install path for every
 change.
+
+
+## Mandatory programming guidelines prompt
+
+Every agent task in this repository must load the shared
+`general-programming-guidelines` skill before the first file edit, using the
+harness-native invocation for the runtime in use:
+
+- Codex-family (`ca`, `qa`, `oa`, `na`, …): `$general-programming-guidelines`
+- Claude Code, Cline, Grok: `/general-programming-guidelines`
+- OpenCode: load `general-programming-guidelines` with the skill tool
+
+Agent Command Center prepends this bare invocation to every dispatched prompt, so the
+harness activates the skill before reading the task. When you start a task by hand, invoke it
+yourself first. Then follow its Work Loop — dedicated worktree branch before
+the first edit, tests, logging, documentation — and do not report the task done
+until its Definition of Done checklist passes.
