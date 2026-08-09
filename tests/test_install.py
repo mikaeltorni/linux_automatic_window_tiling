@@ -115,6 +115,8 @@ def test_extension_filters_by_application_workspace_and_monitor():
     window_source = WINDOW_MODULE.read_text(encoding="utf-8")
 
     assert "getWindowApplicationId" in source
+    assert "getTileGroupKey" in source
+    assert "getTileGroupKey" in window_source
     assert "global.workspace_manager.get_active_workspace()" in source
     assert "win.get_monitor() !== monitorIndex" in window_source
     assert "workspace.get_work_area_for_monitor(monitorIndex)" in source
@@ -127,6 +129,9 @@ def test_extension_filters_by_application_workspace_and_monitor():
     assert "if (windowCount === 2)" in layout_source
     assert "return { rows: 1, columns: 2 };" in layout_source
     assert "workArea.width >= workArea.height" not in layout_source
+    # Kitty family co-tiling: provider-icon classes map to the shared group key.
+    assert "name.startsWith('kitty-')" in window_source
+    assert "return 'kitty'" in window_source
 
 
 def test_get_focus_window_rejects_missing_and_taskbar_skipping_windows():
@@ -223,7 +228,12 @@ console.log(JSON.stringify({
 
 def test_tile_candidate_enforces_application_monitor_workspace_and_window_type():
     result = _run_window_helpers(
-        ["canTileWindow", "getWindowApplicationId", "isTileCandidate"],
+        [
+            "canTileWindow",
+            "getWindowApplicationId",
+            "getTileGroupKey",
+            "isTileCandidate",
+        ],
         """
 const Meta = { WindowType: { NORMAL: 1 } };
 const Shell = {
@@ -271,6 +281,119 @@ console.log(JSON.stringify({
         "skipped": False,
         "dialog": False,
         "immovable": False,
+    }
+
+
+def test_tile_group_key_maps_kitty_family_and_preserves_other_apps():
+    """Kitty + kitty-agent-* share one Super+T group; other apps stay exact."""
+    result = _run_window_helpers(
+        ["getTileGroupKey"],
+        """
+console.log(JSON.stringify({
+  plain: getTileGroupKey('wm-class:kitty'),
+  agentCca: getTileGroupKey('wm-class:kitty-agent-cca'),
+  agentGa: getTileGroupKey('wm-class:kitty-agent-ga'),
+  bareKitty: getTileGroupKey('kitty'),
+  firefox: getTileGroupKey('wm-class:firefox'),
+  empty: getTileGroupKey(''),
+  missing: getTileGroupKey(null),
+}));
+""",
+    )
+
+    assert result == {
+        "plain": "kitty",
+        "agentCca": "kitty",
+        "agentGa": "kitty",
+        "bareKitty": "kitty",
+        "firefox": "firefox",
+        "empty": None,
+        "missing": None,
+    }
+
+
+def test_kitty_family_co_tiles_across_provider_icons_and_excludes_others():
+    """Super+T with focus on a model-icon kitty includes every kitty peer.
+
+    Per-provider windows keep distinct WM_CLASS values for dock icons
+    (``kitty-agent-cca``, ``kitty-agent-ga``) but still co-tile with plain
+    ``kitty``. Unrelated apps never enter the tile set.
+    """
+    result = _run_window_helpers(
+        [
+            "canTileWindow",
+            "getWindowApplicationId",
+            "getTileGroupKey",
+            "isTileCandidate",
+        ],
+        """
+const Meta = { WindowType: { NORMAL: 1 } };
+const Shell = {
+  WindowTracker: {
+    get_default: () => ({ get_window_app: () => null }),
+  },
+};
+const workspace = {};
+const base = {
+  move_resize_frame() {},
+  allows_resize: () => true,
+  allows_move: () => true,
+  get_monitor: () => 0,
+  located_on_workspace: candidate => candidate === workspace,
+  is_skip_taskbar: () => false,
+  get_window_type: () => Meta.WindowType.NORMAL,
+};
+const win = wmClass => ({ ...base, get_wm_class: () => wmClass });
+const peers = {
+  plain: win('kitty'),
+  agentCca: win('kitty-agent-cca'),
+  agentGa: win('kitty-agent-ga'),
+  firefox: win('firefox'),
+};
+const select = focusedId => Object.fromEntries(
+  Object.entries(peers).map(([name, candidate]) => [
+    name,
+    isTileCandidate(candidate, workspace, 0, focusedId),
+  ]),
+);
+console.log(JSON.stringify({
+  focusedAgentCca: select('wm-class:kitty-agent-cca'),
+  focusedPlain: select('wm-class:kitty'),
+  focusedFirefox: select('wm-class:firefox'),
+  identities: {
+    plain: getWindowApplicationId(peers.plain),
+    agentCca: getWindowApplicationId(peers.agentCca),
+    agentGa: getWindowApplicationId(peers.agentGa),
+    firefox: getWindowApplicationId(peers.firefox),
+  },
+}));
+""",
+    )
+
+    assert result["identities"] == {
+        "plain": "wm-class:kitty",
+        "agentCca": "wm-class:kitty-agent-cca",
+        "agentGa": "wm-class:kitty-agent-ga",
+        "firefox": "wm-class:firefox",
+    }
+    assert result["focusedAgentCca"] == {
+        "plain": True,
+        "agentCca": True,
+        "agentGa": True,
+        "firefox": False,
+    }
+    assert result["focusedPlain"] == {
+        "plain": True,
+        "agentCca": True,
+        "agentGa": True,
+        "firefox": False,
+    }
+    # Non-kitty apps still tile only with exact same-app peers.
+    assert result["focusedFirefox"] == {
+        "plain": False,
+        "agentCca": False,
+        "agentGa": False,
+        "firefox": True,
     }
 
 
@@ -385,15 +508,24 @@ console.log(JSON.stringify(parseApplicationPreferredWidths([
 
 
 def test_get_application_preferred_width_matches_identifier_suffix():
-    source = (ROOT / "extension.js").read_text(encoding="utf-8")
-    function_source = _extract_function(source, "getApplicationPreferredWidth")
+    """Preferred-width lookup uses the shared tile-group key (kitty family)."""
+    window_source = WINDOW_MODULE.read_text(encoding="utf-8")
+    extension_source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    functions = "\n".join(
+        [
+            _extract_function(window_source, "getTileGroupKey"),
+            _extract_function(extension_source, "getApplicationPreferredWidth"),
+        ]
+    )
     result = _run_javascript(
-        function_source,
+        functions,
         """
 const matchers = [{ match: 'kitty', preferredWidth: 1300 }];
 console.log(JSON.stringify({
   prefixed: getApplicationPreferredWidth('wm-class:kitty', matchers),
   bare: getApplicationPreferredWidth('kitty', matchers),
+  agentCca: getApplicationPreferredWidth('wm-class:kitty-agent-cca', matchers),
+  agentGa: getApplicationPreferredWidth('wm-class:kitty-agent-ga', matchers),
   other: getApplicationPreferredWidth('wm-class:firefox', matchers),
   nonString: getApplicationPreferredWidth(null, matchers),
 }));
@@ -403,6 +535,8 @@ console.log(JSON.stringify({
     assert result == {
         "prefixed": 1300,
         "bare": 1300,
+        "agentCca": 1300,
+        "agentGa": 1300,
         "other": None,
         "nonString": None,
     }

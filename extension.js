@@ -22,6 +22,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { calculateTileRect, chooseGrid } from './layout.js';
 import {
   getFocusWindow,
+  getTileGroupKey,
   getWindowApplicationId,
   isTileCandidate,
   prepareWindow,
@@ -118,8 +119,10 @@ function parseApplicationPreferredWidths(entries) {
  * Look up the configured layout width for an application identifier.
  *
  * The identifier may be prefixed by its identity source (for example
- * `wm-class:kitty`); only the suffix after the first colon is matched against
- * the configured application names.
+ * `wm-class:kitty` or `wm-class:kitty-agent-cca`). Matching uses the same
+ * tile-group key as Super+T candidate selection, so the configured `kitty:…`
+ * preferred width applies to plain kitty and every per-provider model-icon
+ * class without listing each launcher key.
  *
  * @param {string} applicationId - Identifier from getWindowApplicationId.
  * @param {Array<{match: string, preferredWidth: number}>} matchers - Parsed
@@ -128,14 +131,12 @@ function parseApplicationPreferredWidths(entries) {
  *   is configured or the input is not a string.
  */
 function getApplicationPreferredWidth(applicationId, matchers) {
-  if (typeof applicationId !== 'string') {
+  const groupKey = getTileGroupKey(applicationId);
+  if (!groupKey) {
     return null;
   }
-  const name = applicationId.includes(':')
-    ? applicationId.slice(applicationId.indexOf(':') + 1)
-    : applicationId;
   for (const preference of matchers) {
-    if (name === preference.match) {
+    if (groupKey === preference.match) {
       return preference.preferredWidth;
     }
   }
@@ -145,10 +146,11 @@ function getApplicationPreferredWidth(applicationId, matchers) {
 /**
  * Keybinding handler: tile all windows matching the focused application.
  *
- * Collects the focused application's windows on the active workspace and
- * monitor, orders them with the focused window first, computes a grid, and
- * moves each window into its full cell. Errors are caught and logged so a
- * failure never crashes the Shell.
+ * Collects the focused application's tile-group peers on the active workspace
+ * and monitor (plain kitty and per-provider `kitty-agent-*` windows share one
+ * group; other apps stay exact-identity only), orders them with the focused
+ * window first, computes a grid, and moves each window into its full cell.
+ * Errors are caught and logged so a failure never crashes the Shell.
  *
  * @returns {void}
  */
@@ -185,7 +187,10 @@ function tileFocusedApplicationWindows() {
     }
 
     const preferredWidth = getApplicationPreferredWidth(applicationId, widthMatchers);
-    log.info(`applicationId=${applicationId} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`);
+    const tileGroup = getTileGroupKey(applicationId);
+    log.info(
+      `applicationId=${applicationId} tileGroup=${tileGroup} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`,
+    );
     const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
     for (let index = 0; index < windows.length; index++) {
       const win = windows[index];
