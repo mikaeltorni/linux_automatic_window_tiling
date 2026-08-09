@@ -2,7 +2,12 @@
 <schemalist>
   <schema id="org.gnome.shell.extensions.automatic-window-tiling" path="/org/gnome/shell/extensions/automatic-window-tiling/">
     <key name="tile-focused-application-windows" type="as">
-      <default>[]</default>
+      <!-- The accelerator is the extension's only trigger, and the `keybinding`
+           installer component is optional. This default must therefore match
+           the installer default (AWT_BINDING in lib/tiling_setup.sh) so that
+           deselecting that component leaves the always-on extension core
+           usable instead of inert. -->
+      <default>['&lt;Super&gt;t']</default>
       <summary>Tile focused application windows on the current workspace and monitor</summary>
     </key>
     <key name="application-preferred-widths" type="as">

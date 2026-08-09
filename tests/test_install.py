@@ -323,7 +323,17 @@ console.log(JSON.stringify(calls));
     assert result == [["workspace", "active"], ["fallback"]]
 
 
-def test_schema_has_no_hard_coded_binding():
+def test_schema_binding_default_matches_installer_default():
+    """The schema default is the fallback for a deselected `keybinding` component.
+
+    This test previously required an empty `[]` default so that the installer
+    stayed the only source of the accelerator. That made the always-on extension
+    core inert whenever the optional `keybinding` component was deselected, so
+    the default now mirrors AWT_BINDING instead. The installer remains
+    authoritative when the component runs: it is still the only place that
+    writes the key, and an explicit --binding/AWT_BINDING override still wins
+    (see test_bare_binding_runs_default_components_non_interactively).
+    """
     schema = (
         ROOT
         / "schemas"
@@ -331,8 +341,11 @@ def test_schema_has_no_hard_coded_binding():
     ).read_text(encoding="utf-8")
 
     assert '<key name="tile-focused-application-windows"' in schema
-    assert "<default>[]</default>" in schema
-    assert "&lt;Super&gt;t" not in schema
+    assert "<default>['&lt;Super&gt;t']</default>" in schema
+
+    # The installer, not the schema, still performs every write of the key.
+    setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
+    assert 'AWT_BINDING="${AWT_BINDING:-<Super>t}"' in setup
 
 
 def test_schema_exposes_customizable_keys():
