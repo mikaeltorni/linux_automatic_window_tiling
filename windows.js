@@ -52,6 +52,11 @@ function canTileWindow(win) {
  * is returned, prefixed by its source so callers can compare like-for-like.
  * Falls back to the Shell window tracker's resolved app id.
  *
+ * The raw identity keeps distinct WM_CLASS values (for example plain `kitty`
+ * versus per-provider `kitty-agent-*` model icons). Same-application tiling
+ * groups related terminals via {@link getTileGroupKey} instead of collapsing
+ * those classes here, so dock/task-switcher icons stay distinct.
+ *
  * @param {Meta.Window} win - Window to identify.
  * @returns {string|null} A lowercased `source:value` identifier, or null when no
  *   identity could be determined.
@@ -78,20 +83,58 @@ export function getWindowApplicationId(win) {
 }
 
 /**
+ * Normalize an application identity for same-app tiling group membership.
+ *
+ * Strips the identity source prefix (`wm-class:…`) and maps the kitty terminal
+ * family onto a single group key so plain `kitty` and provider-icon classes
+ * such as `kitty-agent-cca` / `kitty-agent-ga` tile together under Super+T.
+ * Other applications keep their exact lowercased name so unrelated apps never
+ * share a tile set.
+ *
+ * The family rule is prefix-based (`kitty` or `kitty-…`) rather than an
+ * enumeration of launcher keys, so new agent brands co-tile without extension
+ * changes. Icons remain distinct because real WM_CLASS values are unchanged.
+ *
+ * @param {string|null|undefined} applicationId - Identifier from
+ *   {@link getWindowApplicationId}, or a bare application name.
+ * @returns {string|null} Group key used for tile-candidate and preferred-width
+ *   matching, or null when the input is not a usable string.
+ */
+export function getTileGroupKey(applicationId) {
+  if (typeof applicationId !== 'string' || !applicationId.trim()) {
+    return null;
+  }
+  const name = applicationId.includes(':')
+    ? applicationId.slice(applicationId.indexOf(':') + 1).trim()
+    : applicationId.trim();
+  if (!name) {
+    return null;
+  }
+  // Kitty terminals (plain + per-provider model icons launched as kitty-agent-*).
+  if (name === 'kitty' || name.startsWith('kitty-')) {
+    return 'kitty';
+  }
+  return name;
+}
+
+/**
  * Decide whether a window belongs in the tiling set.
  *
- * A candidate must be movable/resizable, share the target application identity,
- * live on the target monitor and workspace, be visible in the taskbar, and be a
- * normal top-level window.
+ * A candidate must be movable/resizable, share the target application's tile
+ * group (exact identity for most apps; the kitty terminal family for plain
+ * kitty and `kitty-agent-*` provider icons), live on the target monitor and
+ * workspace, be visible in the taskbar, and be a normal top-level window.
  *
  * @param {Meta.Window} win - Window to test.
  * @param {Meta.Workspace} workspace - Active workspace constraint.
  * @param {number} monitorIndex - Monitor index constraint.
- * @param {string} applicationId - Application identity to match.
+ * @param {string} applicationId - Focused window's application identity.
  * @returns {boolean} True when the window should be tiled.
  */
 export function isTileCandidate(win, workspace, monitorIndex, applicationId) {
-  if (!canTileWindow(win) || getWindowApplicationId(win) !== applicationId) {
+  const focusedGroup = getTileGroupKey(applicationId);
+  const windowGroup = getTileGroupKey(getWindowApplicationId(win));
+  if (!canTileWindow(win) || !focusedGroup || windowGroup !== focusedGroup) {
     return false;
   }
   if (typeof win.get_monitor !== 'function' || win.get_monitor() !== monitorIndex) {

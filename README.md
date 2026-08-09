@@ -24,7 +24,9 @@ See the full cross-repository map in
 ## Behavior
 
 - Only normal, taskbar-visible windows are tiled.
-- Windows must match the focused application's concrete identity.
+- Windows must match the focused application's tile group: exact identity for
+  most apps, with plain `kitty` and per-provider `kitty-agent-*` model-icon
+  terminals co-tiling as one family (icons stay distinct via real WM_CLASS).
 - Windows must already be on the focused window's workspace and monitor.
 - One window fills the monitor work area.
 - Two windows tile left/right.
