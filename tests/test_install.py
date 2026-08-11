@@ -767,3 +767,77 @@ def test_tile_rects_cover_uneven_work_area_without_gaps():
     assert tiles[1]["x"] == tiles[0]["x"] + tiles[0]["width"]
     assert tiles[2]["x"] == tiles[1]["x"] + tiles[1]["width"]
     assert tiles[2]["x"] + tiles[2]["width"] == 1000
+
+
+def _run_layout_module(body):
+    """Evaluate the whole layout module (exports stripped) plus a test body."""
+    source = (ROOT / "layout.js").read_text(encoding="utf-8").replace("export function", "function")
+    return _run_javascript(source, body)
+
+
+def _detect_tiled_order(frames, rows, columns, width, height):
+    """Run detectTiledOrder against the given frames and grid."""
+    return _run_layout_module(
+        f"console.log(JSON.stringify(detectTiledOrder("
+        f"{json.dumps(frames)}, {rows}, {columns},"
+        f" {{ x: 0, y: 0, width: {width}, height: {height} }})));"
+    )
+
+
+def test_detect_tiled_order_maps_windows_to_their_cells():
+    frames = [
+        {"x": 500, "y": 0, "width": 500, "height": 800},
+        {"x": 0, "y": 0, "width": 500, "height": 800},
+    ]
+
+    assert _detect_tiled_order(frames, 1, 2, 1000, 800) == [1, 0]
+
+
+def test_detect_tiled_order_tolerates_small_size_deviations():
+    frames = [
+        {"x": 0, "y": 0, "width": 490, "height": 792},
+        {"x": 500, "y": 8, "width": 500, "height": 790},
+    ]
+
+    assert _detect_tiled_order(frames, 1, 2, 1000, 800) == [0, 1]
+
+
+def test_detect_tiled_order_returns_null_for_untiled_windows():
+    frames = [
+        {"x": 0, "y": 0, "width": 1000, "height": 800},
+        {"x": 120, "y": 60, "width": 700, "height": 400},
+    ]
+
+    assert _detect_tiled_order(frames, 1, 2, 1000, 800) is None
+
+
+def test_detect_tiled_order_returns_null_when_two_windows_share_a_cell():
+    frames = [
+        {"x": 0, "y": 0, "width": 500, "height": 800},
+        {"x": 0, "y": 0, "width": 500, "height": 800},
+    ]
+
+    assert _detect_tiled_order(frames, 1, 2, 1000, 800) is None
+
+
+def test_cycle_tiled_order_rotates_windows_by_one_cell():
+    assert _run_layout_module(
+        "console.log(JSON.stringify(cycleTiledOrder([2, 0, 1])));"
+    ) == [0, 1, 2]
+
+
+def test_repeated_cycles_return_to_the_original_order():
+    assert _run_layout_module(
+        "let order = [0, 1, 2];\n"
+        "for (let i = 0; i < 3; i++) { order = cycleTiledOrder(order); }\n"
+        "console.log(JSON.stringify(order));"
+    ) == [0, 1, 2]
+
+
+def test_extension_cycles_order_when_windows_are_already_tiled():
+    source = (ROOT / "extension.js").read_text(encoding="utf-8")
+
+    assert "detectTiledOrder" in source
+    assert "cycleTiledOrder" in source
+    assert "const ordered = tiledOrder" in source
+    assert "const win = ordered[index];" in source

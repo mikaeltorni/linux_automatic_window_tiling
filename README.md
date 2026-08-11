@@ -36,6 +36,9 @@ See the full cross-repository map in
 - Kitty uses a 1300px preferred width to choose grid density on wide monitors,
   but tiled windows always expand to fill their complete grid cells.
 - GNOME's work area is used, excluding panels and docks.
+- Pressing the accelerator again while the windows already fill the grid rotates
+  them by one cell instead of re-tiling them into the same places, so tapping
+  the combination repeatedly cycles through the possible arrangements.
 
 ## Installation
 

@@ -19,7 +19,7 @@ import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { calculateTileRect, chooseGrid } from './layout.js';
+import { calculateTileRect, chooseGrid, cycleTiledOrder, detectTiledOrder } from './layout.js';
 import {
   getFocusWindow,
   getTileGroupKey,
@@ -152,6 +152,10 @@ function getApplicationPreferredWidth(applicationId, matchers) {
  * window first, computes a grid, and moves each window into its full cell.
  * Errors are caught and logged so a failure never crashes the Shell.
  *
+ * When the windows already fill the grid, the current on-screen order is
+ * rotated by one cell instead of being re-applied, so repeatedly tapping the
+ * accelerator cycles the windows through the tiles.
+ *
  * @returns {void}
  */
 function tileFocusedApplicationWindows() {
@@ -192,8 +196,15 @@ function tileFocusedApplicationWindows() {
       `applicationId=${applicationId} tileGroup=${tileGroup} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`,
     );
     const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
-    for (let index = 0; index < windows.length; index++) {
-      const win = windows[index];
+    const frames = windows.map(win => (typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null));
+    const tiledOrder = detectTiledOrder(frames, rows, columns, workArea);
+    const ordered = tiledOrder
+      ? cycleTiledOrder(tiledOrder).map(windowIndex => windows[windowIndex])
+      : windows;
+    log.info(`grid=${rows}x${columns} mode=${tiledOrder ? 'cycle' : 'tile'}`);
+
+    for (let index = 0; index < ordered.length; index++) {
+      const win = ordered[index];
       const tile = calculateTileRect(index, rows, columns, workArea);
 
       prepareWindow(win);

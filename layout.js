@@ -123,3 +123,97 @@ export function calculateTileRect(index, rows, columns, workArea) {
     height: y2 - y1,
   };
 }
+
+/**
+ * Relative geometry tolerance when deciding whether a window already fills a
+ * tile. Window managers and applications with size increments (terminals in
+ * particular) land a few pixels off the requested rectangle.
+ */
+const TILE_MATCH_RELATIVE_TOLERANCE = 0.2;
+
+/** Minimum absolute geometry tolerance in pixels for tile matching. */
+const TILE_MATCH_MINIMUM_TOLERANCE = 24;
+
+/**
+ * Find the grid cell a window frame currently occupies.
+ *
+ * A frame matches a cell when its origin and size are within tolerance of the
+ * cell rectangle, so windows that only approximate the requested size (size
+ * increments, minimum sizes) still count as tiled.
+ *
+ * @param {{x: number, y: number, width: number, height: number}} frame -
+ *   Current window frame in physical pixels.
+ * @param {number} cellCount - Number of occupied cells (window count).
+ * @param {number} rows - Number of grid rows.
+ * @param {number} columns - Number of grid columns.
+ * @param {{x: number, y: number, width: number, height: number}} workArea -
+ *   Available work area in physical pixels.
+ * @returns {number} Zero-based cell index, or -1 when the frame matches none.
+ */
+function findTileCell(frame, cellCount, rows, columns, workArea) {
+  for (let cell = 0; cell < cellCount; cell++) {
+    const tile = calculateTileRect(cell, rows, columns, workArea);
+    const toleranceX = Math.max(TILE_MATCH_MINIMUM_TOLERANCE, tile.width * TILE_MATCH_RELATIVE_TOLERANCE);
+    const toleranceY = Math.max(TILE_MATCH_MINIMUM_TOLERANCE, tile.height * TILE_MATCH_RELATIVE_TOLERANCE);
+
+    if (
+      Math.abs(frame.x - tile.x) <= toleranceX
+      && Math.abs(frame.y - tile.y) <= toleranceY
+      && Math.abs(frame.width - tile.width) <= toleranceX
+      && Math.abs(frame.height - tile.height) <= toleranceY
+    ) {
+      return cell;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * Detect the cell order of windows that are already tiled into the grid.
+ *
+ * @param {Array<?{x: number, y: number, width: number, height: number}>} frames -
+ *   Current window frames, indexed like the window list.
+ * @param {number} rows - Number of grid rows.
+ * @param {number} columns - Number of grid columns.
+ * @param {{x: number, y: number, width: number, height: number}} workArea -
+ *   Available work area in physical pixels.
+ * @returns {?Array<number>} Window indices keyed by cell index when every
+ *   window fills a distinct cell of the grid, otherwise null.
+ */
+export function detectTiledOrder(frames, rows, columns, workArea) {
+  const count = frames.length;
+  if (count === 0 || rows * columns < count) {
+    return null;
+  }
+
+  const order = new Array(count).fill(-1);
+  for (let index = 0; index < count; index++) {
+    const frame = frames[index];
+    if (!frame || !Number.isFinite(frame.x) || !Number.isFinite(frame.y)
+      || !Number.isFinite(frame.width) || !Number.isFinite(frame.height)) {
+      return null;
+    }
+
+    const cell = findTileCell(frame, count, rows, columns, workArea);
+    if (cell < 0 || order[cell] !== -1) {
+      return null;
+    }
+    order[cell] = index;
+  }
+
+  return order;
+}
+
+/**
+ * Rotate an existing tile order by one cell.
+ *
+ * Every window moves into the previous cell and the first window wraps around
+ * to the last cell, so repeated triggers cycle through all arrangements.
+ *
+ * @param {Array<number>} order - Window indices keyed by cell index.
+ * @returns {Array<number>} The rotated order.
+ */
+export function cycleTiledOrder(order) {
+  return order.map((_ignored, cell) => order[(cell + 1) % order.length]);
+}
