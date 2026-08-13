@@ -113,7 +113,7 @@ awt_install_core() {
   local enabled enabled_with_extension
   installer_log "adding $EXTENSION_ID to enabled extensions"
   enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)"
-  enabled_with_extension="$(CURRENT="$enabled" python3 "$SCRIPT_DIR/lib/gsettings_strv.py" "$EXTENSION_ID")"
+  enabled_with_extension="$(CURRENT="$enabled" awt_bin "$EXTENSION_ID")"
   run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension"
 
   # Best-effort in-place enable, dispatched in the BACKGROUND so it can never
