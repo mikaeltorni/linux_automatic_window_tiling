@@ -111,6 +111,7 @@ Runtime modules:
 Run tests and syntax checks:
 
 ```bash
+cargo test
 python3 -m pytest tests -q
 bash -n install.sh
 ```

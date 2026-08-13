@@ -1,0 +1,11 @@
+[package]
+name = "awt-tools"
+version = "0.1.0"
+edition = "2021"
+description = "Installer helpers for the automatic-window-tiling GNOME extension"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "awt-tools"
+path = "src/main.rs"

@@ -2,8 +2,10 @@
 schemas/gschemas.compiled
 tests/__pycache__/
 .pytest_cache/
-
 lib/__pycache__/
+target/
+dist/
+.cargo-container/
 
 # BEGIN programming-prompts-cursor (managed by linux_programming_setup)
 # Managed copies from programming_prompts — do not ignore other .cursor/skills/*

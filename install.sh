@@ -136,6 +136,8 @@ main() {
   # repository's self-contained run_as_target/gsettings_array win over the
   # shared helpers' implementations regardless of source order.
   load_component_framework
+  # shellcheck source=lib/awt_bin.sh
+  source "$SCRIPT_DIR/lib/awt_bin.sh"
   # shellcheck source=lib/tiling_setup.sh
   source "$SCRIPT_DIR/lib/tiling_setup.sh"
   awt_install_core || return 1
@@ -153,6 +155,7 @@ main() {
 case "${1:-}" in
   --list-components|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*)
     load_component_framework
+    source "$SCRIPT_DIR/lib/awt_bin.sh"
     source "$SCRIPT_DIR/lib/tiling_setup.sh"
     source "$SCRIPT_DIR/installer/components.sh"
     # --detect/--uninstall reach into the target user's gsettings via
