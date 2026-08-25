@@ -122,6 +122,9 @@ def test_extension_filters_by_application_workspace_and_monitor():
     assert "workspace.get_work_area_for_monitor(monitorIndex)" in source
     assert "win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height)" in source
     assert "getApplicationPreferredWidth" in source
+    assert "tileAllWindows" in source
+    assert "tile-all-windows" in source
+    assert "Main.wm.removeKeybinding(ALL_TILE_KEY)" in source
     assert "from './layout.js'" in source
     assert "from './windows.js'" in source
     assert "parseApplicationPreferredWidths" in source
@@ -258,9 +261,11 @@ const candidate = win => isTileCandidate(
   2,
   'wm-class:kitty',
 );
+const allWindowsCandidate = win => isTileCandidate(win, workspace, 2);
 console.log(JSON.stringify({
   accepted: candidate(base),
   wrongApp: candidate({ ...base, get_wm_class: () => 'Other' }),
+  otherAppInAllMode: allWindowsCandidate({ ...base, get_wm_class: () => 'Other' }),
   wrongMonitor: candidate({ ...base, get_monitor: () => 1 }),
   wrongWorkspace: candidate({
     ...base,
@@ -276,6 +281,7 @@ console.log(JSON.stringify({
     assert result == {
         "accepted": True,
         "wrongApp": False,
+        "otherAppInAllMode": True,
         "wrongMonitor": False,
         "wrongWorkspace": False,
         "skipped": False,
@@ -465,10 +471,13 @@ def test_schema_binding_default_matches_installer_default():
 
     assert '<key name="tile-focused-application-windows"' in schema
     assert "<default>['&lt;Super&gt;t']</default>" in schema
+    assert '<key name="tile-all-windows"' in schema
+    assert "<default>['&lt;Control&gt;&lt;Shift&gt;t']</default>" in schema
 
     # The installer, not the schema, still performs every write of the key.
     setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
     assert 'AWT_BINDING="${AWT_BINDING:-<Super>t}"' in setup
+    assert 'AWT_ALL_BINDING="${AWT_ALL_BINDING:-<Control><Shift>t}"' in setup
 
 
 def test_schema_exposes_customizable_keys():
@@ -482,6 +491,15 @@ def test_schema_exposes_customizable_keys():
     assert "<default>['kitty:1300']</default>" in schema
     assert '<key name="portrait-minimum-tile-height"' in schema
     assert "<default>0</default>" in schema
+
+
+def test_all_window_binding_is_applied_with_the_existing_binding_component():
+    setup = (ROOT / "lib" / "tiling_setup.sh").read_text(encoding="utf-8")
+
+    assert 'ALL_BINDING_KEY="tile-all-windows"' in setup
+    assert 'awt_set_strv "$ALL_BINDING_KEY" "$AWT_ALL_BINDING"' in setup
+    assert 'awt_reset "$ALL_BINDING_KEY"' in setup
+    assert "AWT_ALL_BINDING" in setup
 
 
 def test_parse_application_preferred_widths_skips_malformed_entries():

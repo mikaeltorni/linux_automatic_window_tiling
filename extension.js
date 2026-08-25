@@ -1,18 +1,20 @@
 /**
  * extension.js — GNOME Shell extension entry point for automatic window tiling.
  *
- * Tiles every window that matches the focused application on the focused
- * window's current workspace and monitor into a balanced grid, triggered by a
- * user-configurable keyboard accelerator.
+ * Tiles windows on the focused window's current workspace and monitor into a
+ * balanced grid. The original accelerator limits the set to the focused
+ * application's tile group; a second accelerator includes every eligible
+ * application on that monitor.
  *
  * Functions/Classes:
  * - log: centralized, level-aware logging helper with a consistent prefix.
  * - getApplicationPreferredWidth: per-application layout width lookup.
- * - tileFocusedApplicationWindows: keybinding handler that performs the tiling.
+ * - tileFocusedApplicationWindows: same-application tiling handler.
+ * - tileAllWindows: all-application tiling handler for the focused monitor.
  * - AutomaticWindowTilingExtension: extension lifecycle (enable/disable).
  *
  * Usage: bound to an accelerator via the bundled gsettings schema; pressing the
- * accelerator invokes tileFocusedApplicationWindows.
+ * accelerator invokes one of the two tiling handlers.
  */
 
 import Shell from 'gi://Shell';
@@ -30,6 +32,7 @@ import {
 } from './windows.js';
 
 const TILE_KEY = 'tile-focused-application-windows';
+const ALL_TILE_KEY = 'tile-all-windows';
 const APP_WIDTHS_KEY = 'application-preferred-widths';
 const PORTRAIT_MIN_HEIGHT_KEY = 'portrait-minimum-tile-height';
 const LOG_PREFIX = 'automatic-window-tiling';
@@ -144,25 +147,29 @@ function getApplicationPreferredWidth(applicationId, matchers) {
 }
 
 /**
- * Keybinding handler: tile all windows matching the focused application.
+ * Tile a selected set of windows on the focused window's workspace and monitor.
  *
- * Collects the focused application's tile-group peers on the active workspace
- * and monitor (plain kitty and per-provider `kitty-agent-*` windows share one
- * group; other apps stay exact-identity only), orders them with the focused
- * window first, computes a grid, and moves each window into its full cell.
- * Errors are caught and logged so a failure never crashes the Shell.
+ * When `applicationId` is set, collects that application's tile-group peers
+ * (plain kitty and per-provider `kitty-agent-*` windows share one group; other
+ * apps stay exact-identity only). When it is null, collects every eligible
+ * taskbar-visible normal window on the focused monitor. The latter deliberately
+ * ignores per-application width preferences so mixed applications receive one
+ * balanced grid sized to the monitor as a whole.
  *
- * When the windows already fill the grid, the current on-screen order is
- * rotated by one cell instead of being re-applied, so repeatedly tapping the
- * accelerator cycles the windows through the tiles.
+ * Windows are ordered with the focused window first, and each is moved into its
+ * full cell. When the windows already fill the grid, the current on-screen
+ * order is rotated by one cell instead of being re-applied, so repeatedly
+ * tapping either accelerator cycles through the possible arrangements.
  *
+ * @param {string} mode - Log label describing the tiling mode.
+ * @param {string|null} applicationId - Focused application identity for the
+ *   original same-application mode, or null for all applications.
  * @returns {void}
  */
-function tileFocusedApplicationWindows() {
+function tileWindowsOnFocusedMonitor(mode, applicationId = null) {
   const focusedWindow = getFocusWindow();
-  const applicationId = focusedWindow ? getWindowApplicationId(focusedWindow) : null;
-  if (!focusedWindow || !applicationId || typeof focusedWindow.get_monitor !== 'function') {
-    log.info('no tileable focused window; ignoring tiling request');
+  if (!focusedWindow || typeof focusedWindow.get_monitor !== 'function') {
+    log.info(`no tileable focused window; ignoring ${mode} tiling request`);
     return;
   }
 
@@ -190,10 +197,12 @@ function tileFocusedApplicationWindows() {
       return;
     }
 
-    const preferredWidth = getApplicationPreferredWidth(applicationId, widthMatchers);
-    const tileGroup = getTileGroupKey(applicationId);
+    const preferredWidth = applicationId
+      ? getApplicationPreferredWidth(applicationId, widthMatchers)
+      : null;
+    const tileGroup = applicationId ? getTileGroupKey(applicationId) : 'all-applications';
     log.info(
-      `applicationId=${applicationId} tileGroup=${tileGroup} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`,
+      `mode=${mode} applicationId=${applicationId ?? 'all'} tileGroup=${tileGroup} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`,
     );
     const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
     const frames = windows.map(win => (typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null));
@@ -220,6 +229,34 @@ function tileFocusedApplicationWindows() {
 }
 
 /**
+ * Keybinding handler: tile all eligible applications on the focused monitor.
+ *
+ * The focused window supplies the target monitor and active workspace; the
+ * candidate filter then includes every movable, resizable, normal taskbar
+ * window in that same monitor/workspace, regardless of application identity.
+ *
+ * @returns {void}
+ */
+function tileAllWindows() {
+  tileWindowsOnFocusedMonitor('all applications');
+}
+
+/**
+ * Keybinding handler: tile windows matching the focused application.
+ *
+ * @returns {void}
+ */
+function tileFocusedApplicationWindows() {
+  const focusedWindow = getFocusWindow();
+  const applicationId = focusedWindow ? getWindowApplicationId(focusedWindow) : null;
+  if (!focusedWindow || !applicationId || typeof focusedWindow.get_monitor !== 'function') {
+    log.info('no tileable focused window; ignoring focused application tiling request');
+    return;
+  }
+  tileWindowsOnFocusedMonitor('focused application', applicationId);
+}
+
+/**
  * GNOME Shell extension lifecycle for the automatic window tiler.
  *
  * Registers the tiling keybinding on enable and removes it on disable, reading
@@ -229,7 +266,7 @@ function tileFocusedApplicationWindows() {
  */
 export default class AutomaticWindowTilingExtension extends Extension {
   /**
-   * Activate the extension: load settings and bind the tiling accelerator.
+   * Activate the extension: load settings and bind both tiling accelerators.
    * @returns {void}
    */
   enable() {
@@ -242,7 +279,14 @@ export default class AutomaticWindowTilingExtension extends Extension {
       Shell.ActionMode.NORMAL,
       tileFocusedApplicationWindows,
     );
-    log.info('enabled; tiling keybinding registered');
+    Main.wm.addKeybinding(
+      ALL_TILE_KEY,
+      this._settings,
+      Meta.KeyBindingFlags.NONE,
+      Shell.ActionMode.NORMAL,
+      tileAllWindows,
+    );
+    log.info('enabled; focused-application and all-window tiling keybindings registered');
   }
 
   /**
@@ -251,6 +295,7 @@ export default class AutomaticWindowTilingExtension extends Extension {
    */
   disable() {
     Main.wm.removeKeybinding(TILE_KEY);
+    Main.wm.removeKeybinding(ALL_TILE_KEY);
     extensionSettings = null;
     this._settings = null;
     log.info('disabled; tiling keybinding removed');

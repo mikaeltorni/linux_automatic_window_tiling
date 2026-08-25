@@ -4,7 +4,7 @@
 #
 # The core install (awt_install_core) deploys the extension and enables it so
 # tiling always works, regardless of which optional components the user selects.
-# Each selectable component then writes one gsettings key so its behavior is
+# Each selectable component then writes its GSettings key(s) so its behavior is
 # fully customizable without editing the extension source.
 #
 # Functions:
@@ -12,7 +12,8 @@
 #   gsettings_array          - render one value as a gsettings string-array literal.
 #   awt_set_strv             - write a string-array key on the bundled schema.
 #   awt_install_core         - deploy, compile, and enable the extension (always).
-#   awt_configure_keybinding - apply the tiling accelerator (AWT_BINDING).
+#   awt_configure_keybinding - apply both tiling accelerators (AWT_BINDING and
+#                              AWT_ALL_BINDING).
 #   awt_configure_app_widths - set per-application preferred widths (AWT_APP_WIDTHS).
 #   awt_configure_portrait_stacking - set the portrait minimum tile height.
 #
@@ -23,12 +24,14 @@
 EXTENSION_ID="${EXTENSION_ID:-automatic-window-tiling@local}"
 SCHEMA_ID="${SCHEMA_ID:-org.gnome.shell.extensions.automatic-window-tiling}"
 BINDING_KEY="tile-focused-application-windows"
+ALL_BINDING_KEY="tile-all-windows"
 APP_WIDTHS_KEY="application-preferred-widths"
 PORTRAIT_MIN_HEIGHT_KEY="portrait-minimum-tile-height"
 
 # Defaults preserve the extension's built-in behavior. Override via the
 # environment to customize a clean or scripted install.
 AWT_BINDING="${AWT_BINDING:-<Super>t}"
+AWT_ALL_BINDING="${AWT_ALL_BINDING:-<Control><Shift>t}"
 AWT_APP_WIDTHS="${AWT_APP_WIDTHS:-kitty:1300}"
 AWT_PORTRAIT_MIN_HEIGHT="${AWT_PORTRAIT_MIN_HEIGHT:-0}"
 
@@ -130,10 +133,12 @@ awt_install_core() {
   run_as_target sh -c 'timeout 5 gnome-extensions enable "$1" >/dev/null 2>&1 </dev/null &' _ "$EXTENSION_ID" || true
 }
 
-# awt_configure_keybinding — apply the tiling accelerator from AWT_BINDING.
+# awt_configure_keybinding — apply both tiling accelerators.
 # Unless the accelerator was pinned explicitly (AWT_BINDING_EXPLICIT, e.g. a
 # scripted run), offer the shared interactive press-to-capture UI so the operator
-# can press their own hotkey (default <Super>t). Falls back to the shared helper's
+# can press their own same-application hotkey (default <Super>t). The all-window
+# accelerator remains Ctrl+Shift+T by default and can be overridden with
+# AWT_ALL_BINDING for scripted installations. Falls back to the shared helper's
 # non-interactive default off a TTY. Returns: the gsettings exit status.
 awt_configure_keybinding() {
   if [[ -z "${AWT_BINDING_EXPLICIT:-}" ]] && declare -F isc_capture_hotkey >/dev/null 2>&1; then
@@ -145,6 +150,8 @@ awt_configure_keybinding() {
   fi
   installer_log "applying accelerator $AWT_BINDING for $BINDING_KEY"
   awt_set_strv "$BINDING_KEY" "$AWT_BINDING"
+  installer_log "applying accelerator $AWT_ALL_BINDING for $ALL_BINDING_KEY"
+  awt_set_strv "$ALL_BINDING_KEY" "$AWT_ALL_BINDING"
 }
 
 # awt_configure_app_widths — set per-application preferred tile widths from the
@@ -199,6 +206,6 @@ detect_awt_keybinding()        { awt_schema_present; }
 detect_awt_app_widths()        { awt_schema_present; }
 detect_awt_portrait_stacking() { awt_schema_present; }
 
-uninstall_awt_keybinding()        { installer_log "resetting $BINDING_KEY";          awt_reset "$BINDING_KEY"; }
+uninstall_awt_keybinding()        { installer_log "resetting $BINDING_KEY and $ALL_BINDING_KEY"; awt_reset "$BINDING_KEY"; awt_reset "$ALL_BINDING_KEY"; }
 uninstall_awt_app_widths()        { installer_log "resetting $APP_WIDTHS_KEY";        awt_reset "$APP_WIDTHS_KEY"; }
 uninstall_awt_portrait_stacking() { installer_log "resetting $PORTRAIT_MIN_HEIGHT_KEY"; awt_reset "$PORTRAIT_MIN_HEIGHT_KEY"; }
