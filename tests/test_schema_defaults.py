@@ -33,6 +33,7 @@ SETUP_PATH = ROOT / "lib" / "tiling_setup.sh"
 # gsettings key -> (shell variable holding the installer default, key type)
 MANAGED_KEYS = {
     "tile-focused-application-windows": ("AWT_BINDING", "as"),
+    "tile-all-windows": ("AWT_ALL_BINDING", "as"),
     "application-preferred-widths": ("AWT_APP_WIDTHS", "as"),
     "portrait-minimum-tile-height": ("AWT_PORTRAIT_MIN_HEIGHT", "i"),
 }

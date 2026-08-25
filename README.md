@@ -2,11 +2,13 @@
 
 > Part of [installation_scripts](https://github.com/mikaeltorni/installation_scripts) — the master installer that orchestrates a productivity-focused Ubuntu 24.04 desktop setup (workspaces, hotkeys, window tiling, programming tools, and more). Tested on Ubuntu 24.04.4 LTS.
 
-GNOME Shell extension that tiles windows matching the focused application on
-the focused window's current workspace and monitor.
+GNOME Shell extension that tiles windows on the focused window's current
+workspace and monitor. Super+T keeps the existing same-application behavior;
+Ctrl+Shift+T tiles every eligible application window together on that monitor.
 
-The installer accepts the desired GNOME accelerator, so the tiling action can
-be bound without editing the extension source.
+The installer accepts the desired same-application GNOME accelerator and exposes
+an environment override for the monitor-wide accelerator, so both actions can
+be configured without editing the extension source.
 
 ## Repository dependencies
 
@@ -28,6 +30,8 @@ See the full cross-repository map in
   most apps, with plain `kitty` and per-provider `kitty-agent-*` model-icon
   terminals co-tiling as one family (icons stay distinct via real WM_CLASS).
 - Windows must already be on the focused window's workspace and monitor.
+- Ctrl+Shift+T includes every eligible application on the focused window's
+  workspace and monitor, using one balanced grid for the mixed window set.
 - One window fills the monitor work area.
 - Two windows tile left/right.
 - Four windows use a 2x2 grid.
@@ -78,16 +82,19 @@ customizable without editing the extension source:
 
 | Component | gsettings key | Env override | Default |
 | --- | --- | --- | --- |
-| `keybinding` | `tile-focused-application-windows` | `AWT_BINDING` | `<Super>t` |
+| `keybinding` | `tile-focused-application-windows`, `tile-all-windows` | `AWT_BINDING`, `AWT_ALL_BINDING` | `<Super>t`, `<Control><Shift>t` |
 | `per_app_widths` | `application-preferred-widths` | `AWT_APP_WIDTHS` | `kitty:1300` |
 | `portrait_stacking` | `portrait-minimum-tile-height` | `AWT_PORTRAIT_MIN_HEIGHT` | `0` |
 
-`AWT_APP_WIDTHS` is a comma- or space-separated list of `name:width` entries.
+`AWT_ALL_BINDING` changes the monitor-wide all-window accelerator while keeping
+Ctrl+Shift+T as the default. `AWT_APP_WIDTHS` is a comma- or space-separated list
+of `name:width` entries.
 A `portrait-minimum-tile-height` of `0` (the default) keeps portrait monitors in a
 single, full-height column (pure vertical stacking, top to bottom). Set a positive
 value (for example `1080`) to wrap windows into side-by-side columns once a column
 would fall below that height, keeping many windows usable on a tall monitor. On a TTY the `keybinding`
-component also prompts for the accelerator, defaulting to `<Super>t`.
+component prompts for the same-application accelerator, defaulting to `<Super>t`;
+the all-window accelerator defaults to `<Control><Shift>t`.
 
 The installer can run directly as the desktop user or through `sudo`. When run
 through `sudo`, it uses `SUDO_USER` to install into that user's local GNOME

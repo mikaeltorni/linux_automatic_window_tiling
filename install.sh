@@ -5,7 +5,7 @@
 # Deploys the extension into the target user's local GNOME Shell extensions
 # directory, compiles its gsettings schema, and enables it. The core install
 # always runs so tiling works no matter which optional components are selected.
-# Each customizable behavior (the tiling accelerator, per-application preferred
+# Each customizable behavior (the tiling accelerators, per-application preferred
 # widths, and portrait-monitor stacking) is a selectable component routed through
 # the shared installer component framework, so a clean install reproduces the
 # built-in behavior while every part stays fully customizable.
@@ -28,10 +28,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/installer_logging.sh"
 
 # Separate the legacy binding argument from the component-framework arguments.
-# A single bare positional or `--binding <accel>` selects the tiling accelerator
-# (preserving the interface linux_hotkey_setup calls); everything else is passed
-# through to component_main. Populates FRAMEWORK_ARGS, AWT_BINDING, and
-# AWT_BINDING_EXPLICIT.
+# A single bare positional or `--binding <accel>` selects the same-application
+# tiling accelerator (preserving the interface linux_hotkey_setup calls);
+# everything else is passed through to component_main. Populates FRAMEWORK_ARGS,
+# AWT_BINDING, and AWT_BINDING_EXPLICIT. AWT_ALL_BINDING independently controls
+# the monitor-wide accelerator and defaults to Ctrl+Shift+T.
 # Arguments: the script's "$@".
 # Returns: 0 on success; 2 when --binding is missing its value.
 parse_binding() {

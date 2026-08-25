@@ -120,22 +120,30 @@ export function getTileGroupKey(applicationId) {
 /**
  * Decide whether a window belongs in the tiling set.
  *
- * A candidate must be movable/resizable, share the target application's tile
+ * A candidate must be movable/resizable, live on the target monitor and
+ * workspace, be visible in the taskbar, and be a normal top-level window. When
+ * an application identity is supplied, the candidate must also share its tile
  * group (exact identity for most apps; the kitty terminal family for plain
- * kitty and `kitty-agent-*` provider icons), live on the target monitor and
- * workspace, be visible in the taskbar, and be a normal top-level window.
+ * kitty and `kitty-agent-*` provider icons). Omitting the identity selects all
+ * eligible applications on that monitor.
  *
  * @param {Meta.Window} win - Window to test.
  * @param {Meta.Workspace} workspace - Active workspace constraint.
  * @param {number} monitorIndex - Monitor index constraint.
- * @param {string} applicationId - Focused window's application identity.
+ * @param {string|null} [applicationId=null] - Focused window's application
+ *   identity, or null to include every eligible application.
  * @returns {boolean} True when the window should be tiled.
  */
-export function isTileCandidate(win, workspace, monitorIndex, applicationId) {
-  const focusedGroup = getTileGroupKey(applicationId);
-  const windowGroup = getTileGroupKey(getWindowApplicationId(win));
-  if (!canTileWindow(win) || !focusedGroup || windowGroup !== focusedGroup) {
+export function isTileCandidate(win, workspace, monitorIndex, applicationId = null) {
+  if (!canTileWindow(win)) {
     return false;
+  }
+  if (applicationId != null) {
+    const focusedGroup = getTileGroupKey(applicationId);
+    const windowGroup = getTileGroupKey(getWindowApplicationId(win));
+    if (!focusedGroup || windowGroup !== focusedGroup) {
+      return false;
+    }
   }
   if (typeof win.get_monitor !== 'function' || win.get_monitor() !== monitorIndex) {
     return false;
