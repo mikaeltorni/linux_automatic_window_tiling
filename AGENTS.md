@@ -31,6 +31,11 @@ harness-native invocation for the runtime in use:
 - Claude Code, Cline, Grok: `/general-programming-guidelines`
 - OpenCode: load `general-programming-guidelines` with the skill tool
 
+Also load `linux-configuration` for any GNOME Shell extension, gsettings,
+systemd user unit, or `install.sh` change. Use only the sanctioned in-place
+X11 run-dialog reload (`xdotool` `Alt+F2 r`) to activate edited extension
+code; never logout, `gnome-shell --replace`, or kill the Shell.
+
 Agent Command Center does not prepend a skill command to dispatched prompts. It
 selects skills independently through `acc pp enable` and lists the selected
 skills at the start of each launch prompt, so verify with `acc pp status`
