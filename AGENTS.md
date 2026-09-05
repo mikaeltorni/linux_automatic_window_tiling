@@ -44,9 +44,17 @@ harness-native invocation for the runtime in use:
 - Claude Code, Cline, Grok: `/general-programming-guidelines`
 - OpenCode: load `general-programming-guidelines` with the skill tool
 
-Agent Command Center prepends this bare invocation to every dispatched prompt, so the
-harness activates the skill before reading the task. When you start a task by hand, invoke it
-yourself first. Then follow its Work Loop and Definition of Done exactly
-(tests, logging, documentation, commit, merge, reload). Do not report the task
-done until that checklist passes. Isolation and branch policy live only in the
-skill — this file does not restate them.
+Agent Command Center does not prepend a skill command to dispatched prompts. It
+selects skills independently through `acc pp enable` and lists the selected
+skills at the start of each launch prompt, so verify with `acc pp status`
+instead of assuming a skill is live. When you start a task by hand, invoke it
+yourself first.
+
+Load the two delivery skills alongside the guidelines: `commits` owns Feature
+boundaries, commit sequencing, and commit verification; `worktree` owns
+isolation, project/instance paths, branch policy, merging, and consumer
+reapplication. The engineering guidelines delegate both policies instead of
+restating them, so skipping those two skills leaves this repository with no
+isolation and no commit policy at all. Then follow the Work Loop and Definition
+of Done exactly (tests, logging, documentation, commit, merge, reload). Do not
+report the task done until that checklist passes.
