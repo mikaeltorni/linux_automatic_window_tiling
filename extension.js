@@ -10,6 +10,7 @@
  * - log: centralized, level-aware logging helper with a consistent prefix.
  * - getApplicationPreferredWidth: per-application layout width lookup.
  * - tileFocusedApplicationWindows: same-application tiling handler.
+ * - tileWindowGroup: background same-application tiling by X11 window id.
  * - tileAllWindows: all-application tiling handler for the focused monitor.
  * - AutomaticWindowTilingExtension: extension lifecycle (enable/disable).
  *
@@ -19,6 +20,7 @@
 
 import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
+import Gio from 'gi://Gio';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { calculateTileRect, chooseGrid, cycleTiledOrder, detectTiledOrder } from './layout.js';
@@ -36,6 +38,16 @@ const ALL_TILE_KEY = 'tile-all-windows';
 const APP_WIDTHS_KEY = 'application-preferred-widths';
 const PORTRAIT_MIN_HEIGHT_KEY = 'portrait-minimum-tile-height';
 const LOG_PREFIX = 'automatic-window-tiling';
+const DBUS_BUS_NAME = 'org.gnome.shell.extensions.AutomaticWindowTiling';
+const DBUS_OBJECT_PATH = '/org/gnome/shell/extensions/automatic_window_tiling';
+const DBUS_INTERFACE_XML = `
+<node name="/org/gnome/shell/extensions/automatic_window_tiling">
+  <interface name="org.gnome.shell.extensions.AutomaticWindowTiling">
+    <method name="TileWindowGroup">
+      <arg type="s" name="windowId" direction="in"/>
+    </method>
+  </interface>
+</node>`;
 
 // Live extension settings, populated on enable() so the keybinding handler can
 // read the user-customized per-application widths and portrait packing minimum.
@@ -147,7 +159,7 @@ function getApplicationPreferredWidth(applicationId, matchers) {
 }
 
 /**
- * Tile a selected set of windows on the focused window's workspace and monitor.
+ * Tile a selected set of windows on the anchor window's workspace and monitor.
  *
  * When `applicationId` is set, collects that application's tile-group peers
  * (plain kitty and per-provider `kitty-agent-*` windows share one group; other
@@ -156,19 +168,20 @@ function getApplicationPreferredWidth(applicationId, matchers) {
  * ignores per-application width preferences so mixed applications receive one
  * balanced grid sized to the monitor as a whole.
  *
- * Windows are ordered with the focused window first, and each is moved into its
+ * Windows are ordered with the anchor window first, and each is moved into its
  * full cell. When the windows already fill the grid, the current on-screen
  * order is rotated by one cell instead of being re-applied, so repeatedly
  * tapping either accelerator cycles through the possible arrangements.
  *
  * @param {string} mode - Log label describing the tiling mode.
- * @param {string|null} applicationId - Focused application identity for the
+ * @param {Meta.Window|null} anchorWindow - Window selecting the tile group and monitor.
+ * @param {string|null} applicationId - Anchor application identity for the
  *   original same-application mode, or null for all applications.
+ * @param {boolean} background - Use the anchor workspace and preserve focus/order.
  * @returns {void}
  */
-function tileWindowsOnFocusedMonitor(mode, applicationId = null) {
-  const focusedWindow = getFocusWindow();
-  if (!focusedWindow || typeof focusedWindow.get_monitor !== 'function') {
+function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, background = false) {
+  if (!anchorWindow || typeof anchorWindow.get_monitor !== 'function') {
     log.info(`no tileable focused window; ignoring ${mode} tiling request`);
     return;
   }
@@ -180,17 +193,19 @@ function tileWindowsOnFocusedMonitor(mode, applicationId = null) {
     const portraitMinimumTileHeight = extensionSettings
       ? extensionSettings.get_int(PORTRAIT_MIN_HEIGHT_KEY)
       : 1080;
-    const workspace = global.workspace_manager.get_active_workspace();
-    const monitorIndex = focusedWindow.get_monitor();
+    const workspace = background
+      ? anchorWindow.get_workspace()
+      : global.workspace_manager.get_active_workspace();
+    const monitorIndex = anchorWindow.get_monitor();
     const workArea = workspace.get_work_area_for_monitor(monitorIndex);
     const windows = workspace.list_windows()
       .filter(win => isTileCandidate(win, workspace, monitorIndex, applicationId))
       .sort((left, right) => left.get_stable_sequence() - right.get_stable_sequence());
 
-    const focusedIndex = windows.indexOf(focusedWindow);
+    const focusedIndex = windows.indexOf(anchorWindow);
     if (focusedIndex > 0) {
       windows.splice(focusedIndex, 1);
-      windows.unshift(focusedWindow);
+      windows.unshift(anchorWindow);
     }
     if (windows.length === 0 || workArea.width <= 0 || workArea.height <= 0) {
       log.info(`nothing to tile (windows=${windows.length} workArea=${workArea.width}x${workArea.height})`);
@@ -206,7 +221,7 @@ function tileWindowsOnFocusedMonitor(mode, applicationId = null) {
     );
     const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
     const frames = windows.map(win => (typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null));
-    const tiledOrder = detectTiledOrder(frames, rows, columns, workArea);
+    const tiledOrder = background ? null : detectTiledOrder(frames, rows, columns, workArea);
     const ordered = tiledOrder
       ? cycleTiledOrder(tiledOrder).map(windowIndex => windows[windowIndex])
       : windows;
@@ -222,10 +237,30 @@ function tileWindowsOnFocusedMonitor(mode, applicationId = null) {
       log.info(`requested ${tile.width}x${tile.height} -> actual ${frame ? `${frame.width}x${frame.height}` : 'unknown'}`);
     }
 
-    raiseWindow(focusedWindow, workspace);
+    if (!background) {
+      raiseWindow(anchorWindow, workspace);
+    }
   } catch (error) {
     log.error(`failed to tile application windows: ${error}`);
   }
+}
+
+/** Tile the supplied X11 window's application peers without changing focus. */
+function tileWindowGroup(windowId) {
+  const xid = Number.parseInt(windowId, 0);
+  if (!Number.isSafeInteger(xid) || xid <= 0) {
+    log.warn(`invalid window id for background tiling: ${windowId}`);
+    return;
+  }
+  const anchor = global.get_window_actors()
+    .map(actor => actor.meta_window)
+    .find(win => typeof win.get_xwindow === 'function' && win.get_xwindow() === xid);
+  const applicationId = anchor ? getWindowApplicationId(anchor) : null;
+  if (!anchor || !applicationId || !anchor.get_workspace()) {
+    log.warn(`window unavailable for background tiling: ${windowId}`);
+    return;
+  }
+  tileWindowsOnMonitor('background application', anchor, applicationId, true);
 }
 
 /**
@@ -238,7 +273,7 @@ function tileWindowsOnFocusedMonitor(mode, applicationId = null) {
  * @returns {void}
  */
 function tileAllWindows() {
-  tileWindowsOnFocusedMonitor('all applications');
+  tileWindowsOnMonitor('all applications', getFocusWindow());
 }
 
 /**
@@ -253,7 +288,7 @@ function tileFocusedApplicationWindows() {
     log.info('no tileable focused window; ignoring focused application tiling request');
     return;
   }
-  tileWindowsOnFocusedMonitor('focused application', applicationId);
+  tileWindowsOnMonitor('focused application', focusedWindow, applicationId);
 }
 
 /**
@@ -286,6 +321,14 @@ export default class AutomaticWindowTilingExtension extends Extension {
       Shell.ActionMode.NORMAL,
       tileAllWindows,
     );
+    this._dbusObject = Gio.DBusExportedObject.wrapJSObject(
+      DBUS_INTERFACE_XML,
+      { TileWindowGroup: tileWindowGroup },
+    );
+    this._dbusObject.export(Gio.DBus.session, DBUS_OBJECT_PATH);
+    this._dbusOwnerId = Gio.bus_own_name_on_connection(
+      Gio.DBus.session, DBUS_BUS_NAME, Gio.BusNameOwnerFlags.NONE, null, null,
+    );
     log.info('enabled; focused-application and all-window tiling keybindings registered');
   }
 
@@ -294,6 +337,14 @@ export default class AutomaticWindowTilingExtension extends Extension {
    * @returns {void}
    */
   disable() {
+    if (this._dbusOwnerId) {
+      Gio.bus_unown_name(this._dbusOwnerId);
+      this._dbusOwnerId = null;
+    }
+    if (this._dbusObject) {
+      this._dbusObject.unexport();
+      this._dbusObject = null;
+    }
     Main.wm.removeKeybinding(TILE_KEY);
     Main.wm.removeKeybinding(ALL_TILE_KEY);
     extensionSettings = null;

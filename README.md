@@ -5,6 +5,12 @@
 GNOME Shell extension that tiles windows on the focused window's current
 workspace and monitor. Super+T keeps the existing same-application behavior;
 Ctrl+Shift+T tiles every eligible application window together on that monitor.
+Desktop launchers can call the session D-Bus method
+`org.gnome.shell.extensions.AutomaticWindowTiling.TileWindowGroup` with an X11
+window ID. It applies the Super+T application grid on that window's workspace
+and monitor without selecting the workspace, raising a window, or cycling an
+already tiled grid. This lets a batch of background terminals be placed first
+and tiled once per workspace/monitor.
 
 The installer accepts the desired same-application GNOME accelerator and exposes
 an environment override for the monitor-wide accelerator, so both actions can

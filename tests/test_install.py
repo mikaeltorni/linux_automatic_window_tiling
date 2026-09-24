@@ -137,6 +137,17 @@ def test_extension_filters_by_application_workspace_and_monitor():
     assert "return 'kitty'" in window_source
 
 
+def test_background_group_tiling_uses_anchor_workspace_without_focus_change():
+    source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    assert 'name="TileWindowGroup"' in source
+    assert "anchorWindow.get_workspace()" in source
+    assert "anchorWindow.get_monitor()" in source
+    assert "getTileGroupKey(applicationId)" in source
+    assert "background ? null : detectTiledOrder" in source
+    assert "if (!background) {\n      raiseWindow(anchorWindow, workspace);" in source
+    assert "this._dbusObject.unexport()" in source
+
+
 def test_get_focus_window_rejects_missing_and_taskbar_skipping_windows():
     result = _run_window_helpers(
         ["getFocusWindow"],
