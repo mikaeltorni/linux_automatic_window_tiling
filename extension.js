@@ -270,7 +270,7 @@ function tileWindowGroups(windowIds) {
       log.warn(`window unavailable for background tiling: ${windowId}`);
       continue;
     }
-    const key = `${workspace.get_index()}:${anchor.get_monitor()}:${getTileGroupKey(applicationId)}`;
+    const key = `${workspace.index()}:${anchor.get_monitor()}:${getTileGroupKey(applicationId)}`;
     anchors.set(key, [anchor, applicationId]);
   }
   for (const [anchor, applicationId] of anchors.values()) {

@@ -142,7 +142,7 @@ def test_background_group_tiling_uses_anchor_workspace_without_focus_change():
     assert 'name="TileWindowGroup"' in source
     assert 'name="TileWindowGroups"' in source
     assert 'type="as" name="windowIds"' in source
-    assert "workspace.get_index()" in source
+    assert "workspace.index()" in source
     assert "anchor.get_monitor()" in source
     assert "anchors.set(key, [anchor, applicationId])" in source
     assert "anchorWindow.get_workspace()" in source
@@ -162,7 +162,7 @@ const windows = [
   [10, 0, 0], [11, 0, 0], [12, 0, 1], [13, 1, 0],
 ].map(([id, workspace, monitor]) => ({
   get_description: () => `0x${id.toString(16)}`,
-  get_workspace: () => ({ get_index: () => workspace }),
+  get_workspace: () => ({ index: () => workspace }),
   get_monitor: () => monitor,
 }));
 global.get_window_actors = () => windows.map(win => ({ get_meta_window: () => win }));
