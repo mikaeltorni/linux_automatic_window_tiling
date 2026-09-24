@@ -10,7 +10,10 @@ Desktop launchers can call the session D-Bus method
 window ID. It applies the Super+T application grid on that window's workspace
 and monitor without selecting the workspace, raising a window, or cycling an
 already tiled grid. This lets a batch of background terminals be placed first
-and tiled once per workspace/monitor.
+and tiled once per workspace/monitor. `TileWindowGroups` accepts an array of
+X11 window IDs and groups them by their actual workspace, monitor, and
+application tile group; it covers existing windows moved by hand to another
+monitor.
 
 The installer accepts the desired same-application GNOME accelerator and exposes
 an environment override for the monitor-wide accelerator, so both actions can

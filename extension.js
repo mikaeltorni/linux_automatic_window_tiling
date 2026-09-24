@@ -46,6 +46,9 @@ const DBUS_INTERFACE_XML = `
     <method name="TileWindowGroup">
       <arg type="s" name="windowId" direction="in"/>
     </method>
+    <method name="TileWindowGroups">
+      <arg type="as" name="windowIds" direction="in"/>
+    </method>
   </interface>
 </node>`;
 
@@ -245,22 +248,36 @@ function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, backgrou
   }
 }
 
+/** Tile each actual workspace/monitor represented by X11 windows once. */
+function tileWindowGroups(windowIds) {
+  const actors = global.get_window_actors();
+  const anchors = new Map();
+  for (const windowId of windowIds) {
+    const xid = Number.parseInt(windowId, 0);
+    if (!Number.isSafeInteger(xid) || xid <= 0) {
+      log.warn(`invalid window id for background tiling: ${windowId}`);
+      continue;
+    }
+    const anchor = actors
+      .map(actor => actor.meta_window)
+      .find(win => typeof win.get_xwindow === 'function' && win.get_xwindow() === xid);
+    const applicationId = anchor ? getWindowApplicationId(anchor) : null;
+    const workspace = anchor?.get_workspace();
+    if (!workspace || !applicationId) {
+      log.warn(`window unavailable for background tiling: ${windowId}`);
+      continue;
+    }
+    const key = `${workspace.get_index()}:${anchor.get_monitor()}:${getTileGroupKey(applicationId)}`;
+    anchors.set(key, [anchor, applicationId]);
+  }
+  for (const [anchor, applicationId] of anchors.values()) {
+    tileWindowsOnMonitor('background application', anchor, applicationId, true);
+  }
+}
+
 /** Tile the supplied X11 window's application peers without changing focus. */
 function tileWindowGroup(windowId) {
-  const xid = Number.parseInt(windowId, 0);
-  if (!Number.isSafeInteger(xid) || xid <= 0) {
-    log.warn(`invalid window id for background tiling: ${windowId}`);
-    return;
-  }
-  const anchor = global.get_window_actors()
-    .map(actor => actor.meta_window)
-    .find(win => typeof win.get_xwindow === 'function' && win.get_xwindow() === xid);
-  const applicationId = anchor ? getWindowApplicationId(anchor) : null;
-  if (!anchor || !applicationId || !anchor.get_workspace()) {
-    log.warn(`window unavailable for background tiling: ${windowId}`);
-    return;
-  }
-  tileWindowsOnMonitor('background application', anchor, applicationId, true);
+  tileWindowGroups([windowId]);
 }
 
 /**
@@ -323,7 +340,7 @@ export default class AutomaticWindowTilingExtension extends Extension {
     );
     this._dbusObject = Gio.DBusExportedObject.wrapJSObject(
       DBUS_INTERFACE_XML,
-      { TileWindowGroup: tileWindowGroup },
+      { TileWindowGroup: tileWindowGroup, TileWindowGroups: tileWindowGroups },
     );
     this._dbusObject.export(Gio.DBus.session, DBUS_OBJECT_PATH);
     this._dbusOwnerId = Gio.bus_own_name_on_connection(
