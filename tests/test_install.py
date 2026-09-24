@@ -159,22 +159,22 @@ def test_background_batch_groups_actual_workspaces_and_monitors_once():
         _extract_function(source, "tileWindowGroups"),
         """
 const windows = [
-  [1, 0, 0], [2, 0, 0], [3, 0, 1], [4, 1, 0],
+  [10, 0, 0], [11, 0, 0], [12, 0, 1], [13, 1, 0],
 ].map(([id, workspace, monitor]) => ({
-  get_xwindow: () => id,
+  get_description: () => `0x${id.toString(16)}`,
   get_workspace: () => ({ get_index: () => workspace }),
   get_monitor: () => monitor,
 }));
-global.get_window_actors = () => windows.map(meta_window => ({ meta_window }));
+global.get_window_actors = () => windows.map(win => ({ get_meta_window: () => win }));
 function getWindowApplicationId() { return 'wm-class:kitty'; }
 function getTileGroupKey() { return 'kitty'; }
 const tiled = [];
-function tileWindowsOnMonitor(_mode, anchor) { tiled.push(anchor.get_xwindow()); }
-tileWindowGroups(['1', '2', '3', '4']);
+function tileWindowsOnMonitor(_mode, anchor) { tiled.push(Number(anchor.get_description())); }
+tileWindowGroups(['10', '0xb', '12', '13']);
 console.log(JSON.stringify(tiled));
 """,
     )
-    assert result == [2, 3, 4]
+    assert result == [11, 12, 13]
 
 
 def test_get_focus_window_rejects_missing_and_taskbar_skipping_windows():

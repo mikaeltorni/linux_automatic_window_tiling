@@ -253,14 +253,17 @@ function tileWindowGroups(windowIds) {
   const actors = global.get_window_actors();
   const anchors = new Map();
   for (const windowId of windowIds) {
-    const xid = Number.parseInt(windowId, 0);
+    const xid = /^(?:0x[0-9a-f]+|[0-9]+)$/i.test(windowId) ? Number(windowId) : NaN;
     if (!Number.isSafeInteger(xid) || xid <= 0) {
       log.warn(`invalid window id for background tiling: ${windowId}`);
       continue;
     }
+    // Mutter exposes X11 IDs in get_description() as "0x..."; Wayland
+    // descriptions use a different format and cannot match these IDs.
     const anchor = actors
-      .map(actor => actor.meta_window)
-      .find(win => typeof win.get_xwindow === 'function' && win.get_xwindow() === xid);
+      .map(actor => actor.get_meta_window())
+      .find(win => win && typeof win.get_description === 'function' &&
+        /^0x[0-9a-f]+$/i.test(win.get_description()) && Number(win.get_description()) === xid);
     const applicationId = anchor ? getWindowApplicationId(anchor) : null;
     const workspace = anchor?.get_workspace();
     if (!workspace || !applicationId) {
