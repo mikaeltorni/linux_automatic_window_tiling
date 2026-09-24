@@ -140,12 +140,41 @@ def test_extension_filters_by_application_workspace_and_monitor():
 def test_background_group_tiling_uses_anchor_workspace_without_focus_change():
     source = (ROOT / "extension.js").read_text(encoding="utf-8")
     assert 'name="TileWindowGroup"' in source
+    assert 'name="TileWindowGroups"' in source
+    assert 'type="as" name="windowIds"' in source
+    assert "workspace.get_index()" in source
+    assert "anchor.get_monitor()" in source
+    assert "anchors.set(key, [anchor, applicationId])" in source
     assert "anchorWindow.get_workspace()" in source
     assert "anchorWindow.get_monitor()" in source
     assert "getTileGroupKey(applicationId)" in source
     assert "background ? null : detectTiledOrder" in source
     assert "if (!background) {\n      raiseWindow(anchorWindow, workspace);" in source
     assert "this._dbusObject.unexport()" in source
+
+
+def test_background_batch_groups_actual_workspaces_and_monitors_once():
+    source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    result = _run_javascript(
+        _extract_function(source, "tileWindowGroups"),
+        """
+const windows = [
+  [1, 0, 0], [2, 0, 0], [3, 0, 1], [4, 1, 0],
+].map(([id, workspace, monitor]) => ({
+  get_xwindow: () => id,
+  get_workspace: () => ({ get_index: () => workspace }),
+  get_monitor: () => monitor,
+}));
+global.get_window_actors = () => windows.map(meta_window => ({ meta_window }));
+function getWindowApplicationId() { return 'wm-class:kitty'; }
+function getTileGroupKey() { return 'kitty'; }
+const tiled = [];
+function tileWindowsOnMonitor(_mode, anchor) { tiled.push(anchor.get_xwindow()); }
+tileWindowGroups(['1', '2', '3', '4']);
+console.log(JSON.stringify(tiled));
+""",
+    )
+    assert result == [2, 3, 4]
 
 
 def test_get_focus_window_rejects_missing_and_taskbar_skipping_windows():
