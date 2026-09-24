@@ -96,18 +96,43 @@ resolve_target() {
 }
 
 # Load the shared installer component framework from a sibling checkout of
-# linux_installation_scripts_functions, falling back to an on-demand download so
-# a standalone clean install works without that checkout present.
+# linux_installation_scripts_functions, falling back to a credential-aware clone
+# so a standalone clean install works without that checkout present.
 # Returns: 0 once isc_activate_components is available.
 load_component_framework() {
-  local d
+  local d framework_ref framework_key framework_cache framework_loader framework_tmp
   for d in "${ISC_FUNCTIONS_DIR:-}" \
            "$SCRIPT_DIR/../linux_installation_scripts_functions" \
            "$HOME/projects/linux_installation_scripts_functions"; do
     [[ -n "$d" && -f "$d/component_loader.sh" ]] && { source "$d/component_loader.sh"; break; }
   done
-  declare -F isc_load_helpers >/dev/null 2>&1 || \
-    source <(curl -fsSL "https://raw.githubusercontent.com/mikaeltorni/linux_installation_scripts_functions/${ISC_FUNCTIONS_REF:-master}/component_loader.sh")
+  if ! declare -F isc_load_helpers >/dev/null 2>&1; then
+    framework_ref="${ISC_FUNCTIONS_REF:-master}"
+    framework_key="${framework_ref//\//_}"
+    framework_cache="${XDG_CACHE_HOME:-$HOME/.cache}/installation_scripts/framework-${framework_key}"
+    framework_loader="$framework_cache/component_loader.sh"
+    if [[ ! -f "$framework_loader" ]]; then
+      command -v git >/dev/null 2>&1 || { installer_log "git is required to clone the shared installer framework"; return 1; }
+      mkdir -p "${framework_cache%/*}"
+      framework_tmp="$(mktemp -d "${framework_cache%/*}/.framework-${framework_key}.XXXXXX")"
+      installer_log "cloning shared installer framework ref $framework_ref for standalone installation"
+      if ! GIT_TERMINAL_PROMPT=0 git clone --quiet --depth 1 --single-branch \
+        --branch "$framework_ref" \
+        https://github.com/mikaeltorni/linux_installation_scripts_functions.git \
+        "$framework_tmp/repository"; then
+        installer_log "could not clone the shared installer framework; check GitHub access"
+        return 1
+      fi
+      if [[ ! -e "$framework_cache" ]] && mv "$framework_tmp/repository" "$framework_cache"; then
+        rmdir "$framework_tmp" 2>/dev/null || true
+      else
+        framework_loader="$framework_tmp/repository/component_loader.sh"
+      fi
+    fi
+    ISC_FUNCTIONS_DIR="${framework_loader%/*}"
+    export ISC_FUNCTIONS_DIR
+    source "$framework_loader"
+  fi
   isc_load_helpers
   isc_activate_components
 }
