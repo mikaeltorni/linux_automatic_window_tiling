@@ -899,3 +899,109 @@ def test_extension_cycles_order_when_windows_are_already_tiled():
     assert "cycleTiledOrder" in source
     assert "const ordered = tiledOrder" in source
     assert "const win = ordered[index];" in source
+
+
+@pytest.mark.parametrize("anchor_maximized,peer_maximized", [(3, 0), (0, 3), (3, 3), (1, 2), (0, 0)])
+def test_super_t_tiles_maximized_windows_and_preserves_selection_and_cycling(
+    anchor_maximized, peer_maximized,
+):
+    """Invoke the hotkey handler with realistic state-dependent resize checks."""
+    window_source = WINDOW_MODULE.read_text(encoding="utf-8")
+    extension_source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    functions = "\n".join(
+        [_extract_function(window_source, name) for name in [
+            "getFocusWindow", "canTileWindow", "getWindowApplicationId",
+            "getTileGroupKey", "isTileCandidate", "prepareWindow", "raiseWindow",
+        ]]
+        + [_extract_function(extension_source, name) for name in [
+            "parseApplicationPreferredWidths", "getApplicationPreferredWidth",
+            "tileWindowsOnMonitor", "tileFocusedApplicationWindows",
+        ]]
+    )
+    layout = (ROOT / "layout.js").read_text().replace("export function", "function")
+    result = _run_javascript(
+        functions + "\n" + layout,
+        """
+const Meta = { WindowType: { NORMAL: 1 } };
+const Shell = { WindowTracker: { get_default: () => ({ get_window_app: () => null }) } };
+const log = { info() {}, error(message) { throw new Error(message); } };
+const extensionSettings = null;
+const DEFAULT_APPLICATION_PREFERRED_WIDTHS = ['kitty:1300'];
+const workArea = { x: 0, y: 24, width: 2000, height: 1000 };
+const calls = [];
+const workspace = {
+  get_work_area_for_monitor: () => workArea,
+  list_windows: () => windows,
+};
+function makeWindow(id, maximized, options = {}) {
+  return {
+    maximized,
+    resizeable: true,
+    frame: maximized ? { ...workArea } : { x: 20, y: 50, width: 600, height: 500 },
+    get_maximized() { return this.maximized; },
+    allows_resize() { return this.resizeable && this.maximized !== 3; },
+    allows_move: () => true,
+    unmaximize(flags) {
+      calls.push(['unmaximize', id, flags]);
+      this.maximized &= ~flags;
+    },
+    unmake_fullscreen() {},
+    unminimize() {},
+    move_resize_frame(_userOp, x, y, width, height) {
+      if (this.maximized) throw new Error('must unmaximize before placement');
+      calls.push(['tile', id]);
+      this.frame = { x, y, width, height };
+    },
+    get_frame_rect() { return this.frame; },
+    get_wm_class: () => 'kitty',
+    get_monitor: () => 0,
+    located_on_workspace: candidate => candidate === workspace,
+    is_skip_taskbar: () => false,
+    get_window_type: () => Meta.WindowType.NORMAL,
+    get_stable_sequence: () => id,
+    raise_and_make_recent_on_workspace() { calls.push(['raise', id]); },
+    ...options,
+  };
+}
+const anchor = makeWindow(2, ANCHOR_MAXIMIZED);
+const peer = makeWindow(1, PEER_MAXIMIZED);
+const excluded = [
+  makeWindow(3, 3, { get_wm_class: () => 'firefox' }),
+  makeWindow(4, 3, { get_monitor: () => 1 }),
+  makeWindow(5, 3, { located_on_workspace: () => false }),
+  makeWindow(6, 3, { is_skip_taskbar: () => true }),
+  makeWindow(7, 3, { get_window_type: () => 2 }),
+  makeWindow(8, 3, { resizeable: false }),
+  makeWindow(9, 3, { allows_move: () => false }),
+];
+const windows = [peer, anchor, ...excluded];
+global.display = { focus_window: anchor };
+global.workspace_manager = { get_active_workspace: () => workspace };
+tileFocusedApplicationWindows();
+const first = [anchor.frame, peer.frame];
+const firstCalls = calls.slice();
+calls.length = 0;
+tileFocusedApplicationWindows();
+console.log(JSON.stringify({
+  first,
+  firstCalls,
+  second: [anchor.frame, peer.frame],
+  secondCalls: calls,
+  states: [anchor.maximized, peer.maximized],
+  excludedStates: excluded.map(win => win.maximized),
+}));
+""".replace("ANCHOR_MAXIMIZED", str(anchor_maximized)).replace("PEER_MAXIMIZED", str(peer_maximized)),
+    )
+    left = {"x": 0, "y": 24, "width": 1000, "height": 1000}
+    right = {"x": 1000, "y": 24, "width": 1000, "height": 1000}
+    assert result["first"] == [left, right]
+    expected_calls = []
+    for window_id, flags in [(2, anchor_maximized), (1, peer_maximized)]:
+        if flags:
+            expected_calls.append(["unmaximize", window_id, flags])
+        expected_calls.append(["tile", window_id])
+    assert result["firstCalls"] == expected_calls + [["raise", 2]]
+    assert result["second"] == [right, left]
+    assert result["secondCalls"] == [["tile", 1], ["tile", 2], ["raise", 2]]
+    assert result["states"] == [0, 0]
+    assert result["excludedStates"] == [3] * 7
