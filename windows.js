@@ -30,14 +30,21 @@ export function getFocusWindow() {
  *
  * @param {Meta.Window} win - Candidate window.
  * @returns {boolean} True when the window exposes move_resize_frame and permits
- *   both resizing and moving; false otherwise.
+ *   both resizing and moving, including resizable maximized windows that can
+ *   be restored before placement; false otherwise.
  */
 function canTileWindow(win) {
   if (!win || typeof win.move_resize_frame !== 'function') {
     return false;
   }
   if (typeof win.allows_resize === 'function' && !win.allows_resize()) {
-    return false;
+    // Mutter's allows_resize() is false while fully maximized. The resizeable
+    // property describes the underlying capability independently of that state;
+    // prepareWindow() will restore accepted windows before moving them.
+    const maximized = typeof win.get_maximized === 'function' && win.get_maximized();
+    if (!maximized || !win.resizeable || typeof win.unmaximize !== 'function') {
+      return false;
+    }
   }
   if (typeof win.allows_move === 'function' && !win.allows_move()) {
     return false;
