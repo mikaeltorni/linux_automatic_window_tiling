@@ -39,6 +39,9 @@ See the full cross-repository map in
   most apps, with plain `kitty` and per-provider `kitty-agent-*` model-icon
   terminals co-tiling as one family (icons stay distinct via real WM_CLASS).
 - Windows must already be on the focused window's workspace and monitor.
+- Maximized matching windows remain eligible: Super+T restores them before
+  placing them in the grid, including when the focused window is maximized.
+  Windows outside the selected application, workspace, or monitor keep their state.
 - Ctrl+Shift+T includes every eligible application on the focused window's
   workspace and monitor, using one balanced grid for the mixed window set.
 - One window fills the monitor work area.
