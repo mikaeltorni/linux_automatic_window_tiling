@@ -133,14 +133,13 @@ awt_install_core() {
   run_as_target sh -c 'timeout 5 gnome-extensions enable "$1" >/dev/null 2>&1 </dev/null &' _ "$EXTENSION_ID" || true
 }
 
-# awt_configure_keybinding — apply both tiling accelerators.
-# Unless the accelerator was pinned explicitly (AWT_BINDING_EXPLICIT, e.g. a
-# scripted run), offer the shared interactive press-to-capture UI so the operator
-# can press their own same-application hotkey (default <Super>t). The all-window
-# accelerator remains Ctrl+Shift+T by default and can be overridden with
-# AWT_ALL_BINDING for scripted installations. Falls back to the shared helper's
-# non-interactive default off a TTY. Returns: the gsettings exit status.
+# Apply the focused-app and monitor-wide accelerators through the shared capture
+# helper when no scripted value was supplied; write both GSettings keys.
+# Parameters: none; values come from AWT_BINDING, AWT_ALL_BINDING and the shared
+# capture helper. Returns: the status from the final GSettings write.
 awt_configure_keybinding() {
+  printf 'awt_configure_keybinding parameters=none\n' >&2
+  local result
   if [[ -z "${AWT_BINDING_EXPLICIT:-}" ]] && declare -F isc_capture_hotkey >/dev/null 2>&1; then
     AWT_BINDING="$(isc_capture_hotkey TILING_HOTKEY "$AWT_BINDING" "automatic window tiling")"
   elif [[ -t 0 && -z "${AWT_BINDING_EXPLICIT:-}" ]]; then
@@ -148,10 +147,20 @@ awt_configure_keybinding() {
     read -r -p "Tiling accelerator [${AWT_BINDING}]: " typed || typed=""
     [[ -n "$typed" ]] && AWT_BINDING="$typed"
   fi
+  if [[ -z "${AWT_ALL_BINDING_EXPLICIT:-}" ]] && declare -F isc_capture_hotkey >/dev/null 2>&1; then
+    AWT_ALL_BINDING="$(isc_capture_hotkey TILING_ALL_HOTKEY "$AWT_ALL_BINDING" "monitor-wide window tiling")"
+  elif [[ -t 0 && -z "${AWT_ALL_BINDING_EXPLICIT:-}" ]]; then
+    local typed_all
+    read -r -p "Monitor-wide tiling accelerator [${AWT_ALL_BINDING}]: " typed_all || typed_all=""
+    [[ -n "$typed_all" ]] && AWT_ALL_BINDING="$typed_all"
+  fi
   installer_log "applying accelerator $AWT_BINDING for $BINDING_KEY"
   awt_set_strv "$BINDING_KEY" "$AWT_BINDING"
   installer_log "applying accelerator $AWT_ALL_BINDING for $ALL_BINDING_KEY"
   awt_set_strv "$ALL_BINDING_KEY" "$AWT_ALL_BINDING"
+  result=$?
+  printf 'awt_configure_keybinding return=%s\n' "$result" >&2
+  return "$result"
 }
 
 # awt_configure_app_widths — set per-application preferred tile widths from the

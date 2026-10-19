@@ -14,6 +14,7 @@
 #   bash install.sh                          # interactive component menu (TTY)
 #   bash install.sh '<Super>t'               # legacy: deploy + default components
 #   bash install.sh --binding '<Control><Alt>t'
+#   bash install.sh --binding '<Super>t' --all-binding '<Super><Shift>t'
 #   bash install.sh --default                # all default-on components, no prompt
 #   bash install.sh --all                    # every component, no prompt
 #   bash install.sh --select keybinding      # only the listed components
@@ -27,23 +28,46 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/lib/installer_logging.sh"
 
-# Separate the legacy binding argument from the component-framework arguments.
-# A single bare positional or `--binding <accel>` selects the same-application
-# tiling accelerator (preserving the interface linux_hotkey_setup calls);
-# everything else is passed through to component_main. Populates FRAMEWORK_ARGS,
-# AWT_BINDING, and AWT_BINDING_EXPLICIT. AWT_ALL_BINDING independently controls
-# the monitor-wide accelerator and defaults to Ctrl+Shift+T.
-# Arguments: the script's "$@".
-# Returns: 0 on success; 2 when --binding is missing its value.
+# Parse binding options away from component-framework arguments while preserving
+# the legacy positional focused-app accelerator. Environment overrides count as
+# explicit values so interactive capture cannot replace them.
+# Parameters: "$@" - raw installer arguments. Returns: 0 with binding globals and
+# framework arguments populated; 2 when a binding option has no value.
 parse_binding() {
+  printf 'parse_binding parameters=%s\n' "$*" >&2
   FRAMEWORK_ARGS=()
+  [[ -n "${AWT_BINDING:-}" ]] && AWT_BINDING_EXPLICIT=1
+  [[ -n "${AWT_ALL_BINDING:-}" ]] && AWT_ALL_BINDING_EXPLICIT=1
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --binding)
-        [[ $# -ge 2 ]] || { usage >&2; return 2; }
+        if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == -* ]]; then
+          usage >&2
+          printf 'parse_binding return=2\n' >&2
+          return 2
+        fi
         AWT_BINDING="$2"; AWT_BINDING_EXPLICIT=1; shift 2 ;;
       --binding=*)
+        if [[ -z "${1#*=}" ]]; then
+          usage >&2
+          printf 'parse_binding return=2\n' >&2
+          return 2
+        fi
         AWT_BINDING="${1#*=}"; AWT_BINDING_EXPLICIT=1; shift ;;
+      --all-binding)
+        if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == -* ]]; then
+          usage >&2
+          printf 'parse_binding return=2\n' >&2
+          return 2
+        fi
+        AWT_ALL_BINDING="$2"; AWT_ALL_BINDING_EXPLICIT=1; shift 2 ;;
+      --all-binding=*)
+        if [[ -z "${1#*=}" ]]; then
+          usage >&2
+          printf 'parse_binding return=2\n' >&2
+          return 2
+        fi
+        AWT_ALL_BINDING="${1#*=}"; AWT_ALL_BINDING_EXPLICIT=1; shift ;;
       --select)
         FRAMEWORK_ARGS+=("$1" "${2:-}"); shift 2 ;;
       --)
@@ -54,23 +78,26 @@ parse_binding() {
         AWT_BINDING="$1"; AWT_BINDING_EXPLICIT=1; shift ;;
     esac
   done
+  printf 'parse_binding return=0\n' >&2
   return 0
 }
 
-# Print usage instructions to stdout.
-# Arguments: none.
-# Returns: 0.
+# Print the installer's supported command forms.
+# Parameters: none. Returns: 0 after writing usage to stdout.
 usage() {
+  printf 'usage parameters=none\n' >&2
   cat <<'EOF'
 Usage:
   bash install.sh                      Interactive component menu (TTY)
   bash install.sh '<Super>t'           Deploy and install default components
   bash install.sh --binding '<Control><Alt>t'
+  bash install.sh --binding '<Super>t' --all-binding '<Super><Shift>t'
   bash install.sh --default            All default-on components, no prompt
   bash install.sh --all                Every component, no prompt
   bash install.sh --select a,b,c       Only the listed component ids
   bash install.sh --list-components    List components as id<TAB>label<TAB>default
 EOF
+  printf 'usage return=0\n' >&2
 }
 
 # Resolve the desktop target user and export the session globals the install
@@ -137,12 +164,12 @@ load_component_framework() {
   isc_activate_components
 }
 
-# Orchestrate the installation: parse arguments, resolve the target user, deploy
-# the extension core, then route the customizable components through the shared
-# component framework.
-# Arguments: the script's "$@".
-# Returns: 0 on success; 1 on environment errors; 2 on bad arguments.
+# Parse installer options, resolve the target user, deploy the extension, and
+# route selected components through the shared framework.
+# Parameters: "$@" - raw installer arguments. Returns: 0 after installation;
+# 1 for environment errors; 2 for invalid binding options.
 main() {
+  printf 'main parameters=%s\n' "$*" >&2
   parse_binding "$@" || return $?
 
   # A delegated invocation (linux_hotkey_setup) passes only the tiling binding
@@ -152,7 +179,8 @@ main() {
   # a bare binding is "deploy and install default components", so when a binding
   # was given explicitly and no framework selection was supplied, run defaults
   # non-interactively.
-  if [[ -n "${AWT_BINDING_EXPLICIT:-}" && ${#FRAMEWORK_ARGS[@]} -eq 0 ]]; then
+  if [[ -n "${AWT_BINDING_EXPLICIT:-}${AWT_ALL_BINDING_EXPLICIT:-}" \
+    && ${#FRAMEWORK_ARGS[@]} -eq 0 ]]; then
     FRAMEWORK_ARGS=(--default)
   fi
 
@@ -174,6 +202,7 @@ main() {
 
   printf 'Installed %s.\n' "$EXTENSION_ID"
   printf 'Log out and back in if GNOME Shell has not loaded the extension.\n'
+  printf 'main return=0\n' >&2
 }
 
 # Listing/help must print only their own output (the master installer parses
