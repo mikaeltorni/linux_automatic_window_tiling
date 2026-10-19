@@ -3,8 +3,9 @@
 > Part of [installation_scripts](https://github.com/mikaeltorni/installation_scripts) — the master installer that orchestrates a productivity-focused Ubuntu 24.04 desktop setup (workspaces, hotkeys, window tiling, programming tools, and more). Tested on Ubuntu 24.04.4 LTS.
 
 GNOME Shell extension that tiles windows on the focused window's current
-workspace and monitor. Super+T keeps the existing same-application behavior;
-Ctrl+Shift+T tiles every eligible application window together on that monitor.
+workspace and monitor. Super+T is the default for same-application tiling;
+Ctrl+Shift+T is the default for tiling every eligible application window on
+that monitor. Both accelerators can be selected independently during install.
 Desktop launchers can call the session D-Bus method
 `org.gnome.shell.extensions.AutomaticWindowTiling.TileWindowGroup` with an X11
 window ID. It applies the Super+T application grid on that window's workspace
@@ -15,19 +16,20 @@ X11 window IDs and groups them by their actual workspace, monitor, and
 application tile group; it covers existing windows moved by hand to another
 monitor.
 
-The installer accepts the desired same-application GNOME accelerator and exposes
-an environment override for the monitor-wide accelerator, so both actions can
-be configured without editing the extension source.
+The installer accepts both GNOME accelerators as command-line options or
+environment overrides, so both actions can be configured without editing the
+extension source.
 
 ## Repository dependencies
 
-This repository installs and runs **standalone**. Its installer uses the shared
-component framework owned by `linux_installation_scripts_functions`, resolving it
-from a sibling checkout when present and otherwise downloading it on demand, so a
-clean standalone install needs no other repository checked out. It is *consumed
-by* `linux_hotkey_setup` and `linux_workspaces_setup`, which call this installer
-(passing the desired accelerator) when it sits beside them; that is a one-way
-relationship and does not create a dependency in this direction.
+This repository can be installed **standalone** or through the
+`installation_scripts` bundle. The master bundle clones and runs this installer
+directly as its own selectable repository; `linux_hotkey_setup` does not install
+or configure this extension. The installer uses the shared component framework
+owned by `linux_installation_scripts_functions`, resolving a sibling checkout
+when present and otherwise cloning it with the current Git credentials. A
+standalone first install therefore needs Git access to that framework when no
+sibling checkout exists.
 
 See the full cross-repository map in
 [installation_scripts/DEPENDENCIES.md](https://github.com/mikaeltorni/installation_scripts/blob/master/DEPENDENCIES.md).
@@ -76,6 +78,35 @@ Long-form binding syntax is also supported:
 bash install.sh --binding '<Control><Alt>t'
 ```
 
+Set both requested shortcuts independently. This example keeps Super+T for the
+focused application and selects Super+Shift+T for monitor-wide tiling:
+
+```bash
+bash install.sh --binding '<Super>t' --all-binding '<Super><Shift>t'
+```
+
+The equivalent `--binding=<accelerator>` and
+`--all-binding=<accelerator>` forms are also accepted. The legacy positional
+accelerator remains an alias for `--binding`.
+
+The same choices work in scripted standalone or bundle installs through
+environment overrides:
+
+```bash
+AWT_BINDING='<Super>t' AWT_ALL_BINDING='<Super><Shift>t' bash install.sh --default
+```
+
+For press-to-capture on a terminal, enable the shared capture UI for this
+standalone component install:
+
+```bash
+ISC_HOTKEY_INTERACTIVE=1 bash install.sh --select keybinding
+```
+
+Plain and master-bundle installs stay non-interactive and use the defaults or
+the `AWT_BINDING` / `AWT_ALL_BINDING` overrides. The master bundle passes those
+environment values to this repository's installer.
+
 Component-framework flags select exactly what to configure:
 
 ```bash
@@ -84,6 +115,8 @@ bash install.sh --default            # all default-on components, no prompts
 bash install.sh --all                # every component, no prompts
 bash install.sh --select keybinding  # only the listed component ids
 bash install.sh --list-components    # id<TAB>label<TAB>default, for tooling
+bash install.sh --export-selection   # export current component selection
+bash install.sh --help              # print installer help
 ```
 
 ### Components
@@ -105,19 +138,30 @@ A `portrait-minimum-tile-height` of `0` (the default) keeps portrait monitors in
 single, full-height column (pure vertical stacking, top to bottom). Set a positive
 value (for example `1080`) to wrap windows into side-by-side columns once a column
 would fall below that height, keeping many windows usable on a tall monitor. On a TTY the `keybinding`
-component prompts for the same-application accelerator, defaulting to `<Super>t`;
-the all-window accelerator defaults to `<Control><Shift>t`.
+component uses the shared press-to-capture engine for both keys when
+`ISC_HOTKEY_INTERACTIVE=1`; otherwise it uses the configured values or defaults.
 
 The installer can run directly as the desktop user or through `sudo`. When run
 through `sudo`, it uses `SUDO_USER` to install into that user's local GNOME
 Shell extension directory and apply settings through the user's session bus. It
-resolves the shared component framework from a sibling
-`linux_installation_scripts_functions` checkout, falling back to an on-demand
-download so a standalone clean install needs no extra setup.
+requires `glib-compile-schemas` (Ubuntu package `libglib2.0-bin`) and builds the
+`awt-tools` Rust helper during installation. Provide Cargo, or Docker/Podman for
+the container build fallback. When the shared framework is not checked out as a
+sibling, Git credentials must permit cloning
+`linux_installation_scripts_functions`.
 
-Log out and back in after installation when GNOME Shell cannot reload the
-extension in the current session. On X11, restarting GNOME Shell also loads the
-new version.
+GSettings accelerator changes apply live. If edited extension JavaScript needs
+a Shell reload, use GNOME's in-place run-dialog reload on X11:
+
+```bash
+xdotool key --clearmodifiers alt+F2
+sleep 0.5
+xdotool type 'r'
+xdotool key Return
+```
+
+On Wayland, deploy the files and log out and back in to load edited extension
+code.
 
 ## Development
 
@@ -127,17 +171,22 @@ Runtime modules:
 - `layout.js` owns pure grid selection and tile geometry calculations.
 - `windows.js` owns GNOME window selection, identity, and state management.
 
-Run tests and syntax checks:
+Run the complete local test and build checks:
+
+```bash
+./tests/run_tests.sh
+```
+
+The runner checks Rust tests and builds, Python tests, Bash syntax, and the
+GSettings schema. It requires Cargo, Python with pytest, Node.js, and
+`glib-compile-schemas`.
+
+The individual checks can also be run separately:
 
 ```bash
 cargo test
 python3 -m pytest tests -q
 bash -n install.sh
-```
-
-Validate the schema:
-
-```bash
 glib-compile-schemas --strict schemas
 ```
 
@@ -145,15 +194,17 @@ The compiled `schemas/gschemas.compiled` file is generated and ignored.
 
 ## Integration
 
-`linux_hotkey_setup` detects this repository as a sibling checkout and invokes:
+The `installation_scripts` master installer clones this repository and runs it
+directly before `linux_hotkey_setup`. It exposes this installer's
+`keybinding` component in the repository selection menu. Configure both hotkeys
+for the bundle with:
 
 ```bash
-bash ../linux_automatic_window_tiling/install.sh '<Super>t'
+sudo env AWT_BINDING='<Super>t' AWT_ALL_BINDING='<Super><Shift>t' bash install.sh
 ```
 
-The master `installation_scripts` repository clones this project before
-`linux_hotkey_setup`, while installation is delegated to the hotkey setup so
-the binding remains explicitly owned there.
+The same installer and accelerator options are available from this repository
+when run standalone.
 
 ## Detect, reconfigure, and uninstall
 
