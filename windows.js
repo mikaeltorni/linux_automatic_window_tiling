@@ -9,6 +9,33 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 /**
+ * Read maximization directions through the current or legacy Mutter API.
+ * Parameters: win - GNOME window or compatible test double.
+ * Returns: maximization flags, or zero when no reader is available.
+ */
+export function getWindowMaximizeFlags(win) {
+  console.log('getWindowMaximizeFlags parameters', { win });
+  const read = win.get_maximize_flags ?? win.get_maximized;
+  const result = typeof read === 'function' ? read.call(win) : 0;
+  console.log(result);
+  return result;
+}
+
+/**
+ * Apply or clear maximization directions across Mutter API versions.
+ * Parameters: win - GNOME window; flags - captured directions; enabled - apply rather than clear.
+ * Returns: undefined after updating maximization.
+ */
+export function setWindowMaximizeFlags(win, flags, enabled) {
+  console.log('setWindowMaximizeFlags parameters', { win, flags, enabled });
+  const change = enabled
+    ? (win.set_maximize_flags ?? win.maximize)
+    : (win.set_unmaximize_flags ?? win.unmaximize);
+  change.call(win, flags);
+  console.log(undefined);
+}
+
+/**
  * Resolve the currently focused window when it is eligible for tiling.
  *
  * Windows that skip the taskbar (panels, docks, notifications) are ignored.
@@ -28,27 +55,30 @@ export function getFocusWindow() {
 /**
  * Determine whether a window can be moved and resized by the tiler.
  *
- * @param {Meta.Window} win - Candidate window.
- * @returns {boolean} True when the window exposes move_resize_frame and permits
- *   both resizing and moving, including resizable maximized windows that can
- *   be restored before placement; false otherwise.
+ * Parameters: win - candidate window.
+ * Returns: whether it permits frame resizing and moving after restoring maximization.
  */
 function canTileWindow(win) {
+  console.log('canTileWindow parameters', { win });
   if (!win || typeof win.move_resize_frame !== 'function') {
+    console.log(false);
     return false;
   }
   if (typeof win.allows_resize === 'function' && !win.allows_resize()) {
     // Mutter's allows_resize() is false while fully maximized. The resizeable
     // property describes the underlying capability independently of that state;
     // prepareWindow() will restore accepted windows before moving them.
-    const maximized = typeof win.get_maximized === 'function' && win.get_maximized();
+    const maximized = getWindowMaximizeFlags(win);
     if (!maximized || !win.resizeable || typeof win.unmaximize !== 'function') {
+      console.log(false);
       return false;
     }
   }
   if (typeof win.allows_move === 'function' && !win.allows_move()) {
+    console.log(false);
     return false;
   }
+  console.log(true);
   return true;
 }
 
@@ -173,18 +203,17 @@ export function isTileCandidate(win, workspace, monitorIndex, applicationId = nu
 /**
  * Clear window states that would prevent precise tiling.
  *
- * Unmaximizes, unfullscreens, and unminimizes the window where the relevant
- * methods are available so a subsequent move_resize_frame takes effect.
+ * Unmaximizes, unfullscreens, and unminimizes using the available Mutter API
+ * so a subsequent move_resize_frame takes effect.
  *
- * @param {Meta.Window} win - Window to normalize.
- * @returns {void}
+ * Parameters: win - eligible window whose blocking states must be cleared.
+ * Returns: undefined after restoring its movable, resizable state.
  */
 export function prepareWindow(win) {
-  if (typeof win.get_maximized === 'function') {
-    const maximized = win.get_maximized();
-    if (maximized) {
-      win.unmaximize(maximized);
-    }
+  console.log('prepareWindow parameters', { win });
+  const maximized = getWindowMaximizeFlags(win);
+  if (maximized) {
+    setWindowMaximizeFlags(win, maximized, false);
   }
   if (typeof win.unmake_fullscreen === 'function') {
     win.unmake_fullscreen();
@@ -192,6 +221,7 @@ export function prepareWindow(win) {
   if (typeof win.unminimize === 'function') {
     win.unminimize();
   }
+  console.log(undefined);
 }
 
 /**
@@ -223,7 +253,7 @@ export function captureWindowState(win) {
   console.log('captureWindowState parameters', { win });
   const result = {
     frame: typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null,
-    maximized: typeof win.get_maximized === 'function' ? win.get_maximized() : 0,
+    maximized: getWindowMaximizeFlags(win),
     fullscreen: typeof win.is_fullscreen === 'function' ? win.is_fullscreen() : Boolean(win.fullscreen),
     minimized: Boolean(win.minimized),
   };
@@ -242,7 +272,7 @@ export function restoreWindowState(win, state) {
     placeWindowInTile(win, state.frame);
   }
   if (state.maximized && typeof win.maximize === 'function') {
-    win.maximize(state.maximized);
+    setWindowMaximizeFlags(win, state.maximized, true);
   }
   if (state.fullscreen && typeof win.make_fullscreen === 'function') {
     win.make_fullscreen();
