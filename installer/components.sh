@@ -15,6 +15,7 @@
 
 ISC_REPO_NAME="linux_automatic_window_tiling"
 ISC_REPO_LABEL="Automatic same-application and monitor-wide window tiling"
+ISC_CORE=awt_install_core
 
 ISC_COMPONENTS=(
   "keybinding|Tiling accelerators (default <Super>t / Ctrl+Shift+T)|on|awt_configure_keybinding|detect_awt_keybinding|uninstall_awt_keybinding"

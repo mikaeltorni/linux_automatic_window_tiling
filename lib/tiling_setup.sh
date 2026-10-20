@@ -82,42 +82,66 @@ awt_set_strv() {
     "$SCHEMA_ID" "$key" "$(gsettings_array "$@")"
 }
 
-# awt_install_core — deploy the extension, compile its schema, and enable it.
-# Always runs so the core tiling action works no matter which optional
-# components are chosen. Idempotent: re-running overwrites files in place.
-# Returns: 0 on success; 1 on missing tooling.
-awt_install_core() {
-  installer_log "installing extension files to $TARGET_DIR"
+# Require the schema compiler and build/resolve the installation helper.
+# Parameters: none. Returns: 0 with required tools ready, or 1 on failure.
+awt_require_install_tools() {
+  printf 'awt_require_install_tools parameters=none\n' >&2
   command -v glib-compile-schemas >/dev/null 2>&1 || {
     printf 'glib-compile-schemas is required (package: libglib2.0-bin).\n' >&2
+    printf 'awt_require_install_tools return=1\n' >&2
     return 1
   }
+  ensure_awt_bin || {
+    printf 'awt_require_install_tools return=1\n' >&2
+    return 1
+  }
+  printf 'awt_require_install_tools return=0\n' >&2
+  return 0
+}
 
-  install -d "$TARGET_DIR/schemas"
-  install -m 0644 \
+# Deploy, compile and enable core only after prerequisites and enabled-list preparation succeed.
+# Parameters: none. Returns: 0 on success; 1 when preparation or installation fails.
+awt_install_core() {
+  printf 'awt_install_core parameters=none\n' >&2
+  local enabled enabled_with_extension
+  awt_require_install_tools || { printf 'awt_install_core return=1\n' >&2; return 1; }
+  enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)" || {
+    printf 'awt_install_core return=1\n' >&2; return 1;
+  }
+  enabled_with_extension="$(CURRENT="$enabled" awt_bin "$EXTENSION_ID")" || {
+    printf 'awt_install_core return=1\n' >&2; return 1;
+  }
+  installer_log "installing extension files to $TARGET_DIR"
+  if ! install -d "$TARGET_DIR/schemas" || ! install -m 0644 \
     "$SCRIPT_DIR/extension.js" \
     "$SCRIPT_DIR/layout.js" \
     "$SCRIPT_DIR/metadata.json" \
     "$SCRIPT_DIR/windows.js" \
-    "$TARGET_DIR/"
-  install -m 0644 \
+    "$TARGET_DIR/" || ! install -m 0644 \
     "$SCRIPT_DIR/schemas/org.gnome.shell.extensions.automatic-window-tiling.gschema.xml" \
-    "$TARGET_DIR/schemas/"
+    "$TARGET_DIR/schemas/"; then
+    printf 'awt_install_core return=1\n' >&2; return 1
+  fi
   installer_log "compiling gsettings schema"
-  glib-compile-schemas --strict "$TARGET_DIR/schemas"
+  glib-compile-schemas --strict "$TARGET_DIR/schemas" || {
+    printf 'awt_install_core return=1\n' >&2; return 1;
+  }
   if [[ "$(id -u)" -eq 0 ]]; then
     installer_log "setting extension ownership to $TARGET_USER:$TARGET_USER"
-    chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_DIR"
+    chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_DIR" || {
+      printf 'awt_install_core return=1\n' >&2; return 1;
+    }
   fi
 
   installer_log "ensuring user extensions stay enabled"
-  run_as_target gsettings set org.gnome.shell disable-user-extensions false
+  run_as_target gsettings set org.gnome.shell disable-user-extensions false || {
+    printf 'awt_install_core return=1\n' >&2; return 1;
+  }
 
-  local enabled enabled_with_extension
   installer_log "adding $EXTENSION_ID to enabled extensions"
-  enabled="$(run_as_target gsettings get org.gnome.shell enabled-extensions)"
-  enabled_with_extension="$(CURRENT="$enabled" awt_bin "$EXTENSION_ID")"
-  run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension"
+  run_as_target gsettings set org.gnome.shell enabled-extensions "$enabled_with_extension" || {
+    printf 'awt_install_core return=1\n' >&2; return 1;
+  }
 
   # Best-effort in-place enable, dispatched in the BACKGROUND so it can never
   # block the installer. `gnome-extensions enable` is a synchronous D-Bus call
@@ -131,6 +155,9 @@ awt_install_core() {
   # installer's pipe open.
   installer_log "dispatching background in-place extension enable (non-blocking)"
   run_as_target sh -c 'timeout 5 gnome-extensions enable "$1" >/dev/null 2>&1 </dev/null &' _ "$EXTENSION_ID" || true
+  AWT_CORE_INSTALLED=1
+  printf 'awt_install_core return=0\n' >&2
+  return 0
 }
 
 # Apply the focused-app and monitor-wide accelerators through the shared capture
