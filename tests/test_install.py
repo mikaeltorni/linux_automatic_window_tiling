@@ -54,13 +54,22 @@ def _run_javascript(source, body):
 
 
 def _run_window_helpers(function_names, body):
-    """Evaluate selected window helpers with caller-provided GNOME fakes."""
+    """Evaluate selected helpers with shared maximization adaptation and GNOME fakes.
+
+    Parameters: function_names - requested window helpers; body - caller-provided JS invocation.
+    Returns: the parsed JSON result.
+    """
+    print(f"function_names={function_names}, body={body}")
     source = WINDOW_MODULE.read_text(encoding="utf-8")
     functions = "\n".join(
         _extract_function(source, function_name)
-        for function_name in function_names
+        for function_name in dict.fromkeys([
+            "getWindowMaximizeFlags", "setWindowMaximizeFlags", *function_names,
+        ])
     )
-    return _run_javascript(functions, body)
+    result = _run_javascript(functions, body)
+    print(result)
+    return result
 
 
 def _choose_grid(window_count, width, height, preferred_width):
@@ -937,6 +946,7 @@ def test_super_t_tiles_maximized_windows_and_preserves_selection_and_cycling(
     extension_source = (ROOT / "extension.js").read_text(encoding="utf-8")
     functions = "\n".join(
         [_extract_function(window_source, name) for name in [
+            "getWindowMaximizeFlags", "setWindowMaximizeFlags",
             "getFocusWindow", "canTileWindow", "getWindowApplicationId",
             "getTileGroupKey", "isTileCandidate", "prepareWindow", "placeWindowInTile",
             "captureWindowState", "restoreWindowState", "raiseWindow",
