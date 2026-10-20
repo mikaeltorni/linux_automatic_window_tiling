@@ -1,43 +1,42 @@
-# Linux Automatic Window Tiling
+# Linux Automatic Window Tiling for GNOME Shell
 
-> Part of [installation_scripts](https://github.com/mikaeltorni/installation_scripts) — the master installer that orchestrates a productivity-focused Ubuntu 24.04 desktop setup (workspaces, hotkeys, window tiling, programming tools, and more). Also installs independently.
+[![Last commit: 2026-10-20](docs/badges/last-commit.svg)](https://github.com/mikaeltorni/linux_automatic_window_tiling/commits/master)
+[![Commit activity: 46 commits in 30 days](docs/badges/commit-activity.svg)](https://github.com/mikaeltorni/linux_automatic_window_tiling/graphs/commit-activity)
+[![Open issues: 0](docs/badges/issues.svg)](https://github.com/mikaeltorni/linux_automatic_window_tiling/issues)
 
-GNOME Shell extension that tiles windows on the focused window's current
-workspace and monitor. Super+T is the default for same-application tiling;
-Ctrl+Shift+T is the default for tiling every eligible application window on
-that monitor. Both accelerators can be selected independently during install.
-Desktop launchers can call the session D-Bus method
-`org.gnome.shell.extensions.AutomaticWindowTiling.TileWindowGroup` with an X11
-window ID. It applies the Super+T application grid on that window's workspace
-and monitor without selecting the workspace, raising a window, or cycling an
-already tiled grid. This lets a batch of background terminals be placed first
-and tiled once per workspace/monitor. `TileWindowGroups` accepts an array of
-X11 window IDs and groups them by their actual workspace, monitor, and
-application tile group; it covers existing windows moved by hand to another
-monitor.
+Linux Automatic Window Tiling is a GNOME Shell extension for shortcut-driven tiling of same-application windows or all eligible windows.
 
-The installer accepts both GNOME accelerators as command-line options or
-environment overrides, so both actions can be configured without editing the
-extension source.
+By default, `Super+T` tiles windows from the focused app and `Ctrl+Shift+T` tiles all eligible windows on the current workspace and monitor. A keybinding or D-Bus request starts tiling; opening a window by itself does not reflow the layout.
+
+[Quick start](#quick-start) · [Features](#features-of-gnome-shell-window-tiling) · [Dependencies](#repository-dependencies) · [Installation](#install-the-gnome-shell-window-tiling-extension) · [Configuration](#configure-gnome-shell-window-tiling) · [Development](#developing-the-gnome-shell-window-tiling-extension) · [Contributing](#contributing) · [Integration](#integrating-gnome-shell-window-tiling) · [FAQ](#gnome-shell-window-tiling-faq) · [License](#license)
+
+## Quick start
+
+From this checkout, install the extension without the private shared installer framework:
+
+```bash
+bash install.sh --standalone
+```
+
+Focus an app window and press `Super+T` to tile that app's windows. Press `Ctrl+Shift+T` to tile every eligible window on the same workspace and monitor.
+
+![Diagram of two GNOME Shell tiling modes: Super+T arranges windows from the focused app, while Ctrl+Shift+T arranges eligible windows from several apps](docs/window-tiling-modes.svg)
 
 ## Repository dependencies
 
-Use `bash install.sh --standalone` to install directly from this checkout.
-This path does not fetch setup repositories or require GitHub credentials.
-It needs the build and desktop tools listed below; obtaining a toolchain or
-container image can require network access.
+The standalone command above installs directly from this checkout. It does not fetch setup repositories or require GitHub credentials. It needs the build and desktop tools listed below; obtaining a toolchain or container image can require network access.
 
-The optional `installation_scripts` bundle clones and runs this installer
+The optional [installation_scripts](https://github.com/mikaeltorni/installation_scripts) bundle clones and runs this installer
 as its own selectable repository; `linux_hotkey_setup` does not configure it.
 Bundle/menu modes (commands without `--standalone`) use
-`linux_installation_scripts_functions`, resolving a sibling checkout or cloning
+[`linux_installation_scripts_functions`](https://github.com/mikaeltorni/linux_installation_scripts_functions), resolving a sibling checkout or cloning
 it using the current Git credentials. That framework is currently private;
-use `--standalone` for a public installation without framework access.
+use `--standalone` to install from this checkout without framework access.
 
 See the full cross-repository map in
 [installation_scripts/DEPENDENCIES.md](https://github.com/mikaeltorni/installation_scripts/blob/master/DEPENDENCIES.md).
 
-## Behavior
+## Features of GNOME Shell Window Tiling
 
 - Only normal, taskbar-visible windows are tiled.
 - Windows must match the focused application's tile group: exact identity for
@@ -68,9 +67,9 @@ See the full cross-repository map in
   them by one cell instead of re-tiling them into the same places, so tapping
   the combination repeatedly cycles through the possible arrangements.
 
-## Installation
+## Install the GNOME Shell Window Tiling Extension
 
-### Standalone
+### Standalone GNOME Shell installation
 
 From the repository directory, install as the desktop user without sudo:
 
@@ -91,7 +90,7 @@ that complete installation. On a terminal, omitted shortcuts can be typed at
 the prompts; non-interactive runs use defaults or supplied values.
 Use `bash install.sh --standalone --help` for usage.
 
-### Bundle and component menu
+### Bundle and component-menu installation
 
 With access to the shared framework, omit `--standalone` to use its component
 menu and selection/configuration controls. The core is installed when applying
@@ -150,7 +149,9 @@ environment and shortcut capture. Use `--config NAME.json` to select an
 `installation_configs/` profile, `--export-selection` to export its selection,
 and `--auth` to enable the framework's authentication option.
 
-### Components
+## Configure GNOME Shell Window Tiling
+
+### Available components
 
 All components are default-on, so a plain install reproduces the extension's
 built-in behavior. Each writes a single gsettings key, so behavior stays fully
@@ -200,7 +201,7 @@ xdotool key Return
 On Wayland, deploy the files and log out and back in to load edited extension
 code.
 
-## Development
+## Developing the GNOME Shell Window Tiling Extension
 
 Runtime modules:
 
@@ -247,7 +248,7 @@ Exactly one positional value is required; malformed existing array text is
 treated as empty for compatibility. Diagnostics remain separate from its
 machine-readable stdout.
 
-### Verification scope
+### GNOME Shell verification scope
 
 The release checks passed 8 Rust and 101 Python tests, helper builds, shell
 syntax, and strict GSettings schema validation. They include public installer
@@ -262,7 +263,7 @@ have mocked regression coverage. Other GNOME versions and Wayland have not
 received the same live VM verification. Application minimum sizes can make a
 uniform grid impossible; such requests restore the previous layout.
 
-### Live X11 VM regression
+### Live X11 window-tiling verification
 
 `tests/check_vm_tiling.py` checks actual GTK window frames after pressing a
 configured shortcut twice. It verifies that windows fit the work area without
@@ -293,7 +294,11 @@ shortcut. Replace the `ID1` placeholders with numeric X11 window IDs:
 python3 tests/check_vm_tiling.py --expect-unchanged --key ctrl+shift+t --windows ID1 ID2 ID3 ID4
 ```
 
-## Integration
+## Contributing
+
+This is a private repository, so contribution access is limited to authorized collaborators. Before changing installed behavior, read [AGENTS.md](AGENTS.md) and follow the development and verification steps in this README.
+
+## Integrating GNOME Shell Window Tiling
 
 The `installation_scripts` master installer clones this repository and runs it
 directly before `linux_hotkey_setup`. It exposes this installer's
@@ -321,7 +326,7 @@ gdbus call --session --dest org.gnome.shell.extensions.AutomaticWindowTiling \
 Replace example IDs with actual X11 window IDs. Invalid or unavailable IDs are
 ignored; background calls preserve focus/workspace and do not cycle layouts.
 
-## Detect, reconfigure, and uninstall
+## Reconfiguring and uninstalling the window-tiling extension
 
 Framework modes track component configuration and support reapplying or
 resetting it:
@@ -349,7 +354,33 @@ uses a live check where deterministic and otherwise an install receipt under
 `${XDG_STATE_HOME:-~/.local/state}/isc/receipts/`; a component without a reversal
 step simply clears that receipt on uninstall.
 
-## Disclaimer
+## GNOME Shell Window Tiling FAQ
+
+### What does `Super+T` tile?
+
+`Super+T` arranges normal, taskbar-visible windows from the focused application's tile group on the current workspace and monitor. Plain `kitty` and `kitty-agent-*` terminal windows can share one group; other application identities remain separate.
+
+### How do I tile every eligible application window?
+
+Press `Ctrl+Shift+T` to arrange all eligible windows on the focused window's workspace and monitor. Applications outside that workspace or monitor keep their current layout.
+
+### Does the extension tile when an application opens?
+
+No. Tiling starts when a configured shortcut or the extension's D-Bus method is called, so opening a window does not trigger reflow by itself.
+
+### Why can a tiling request leave the original layout unchanged?
+
+An application can refuse a tile that is smaller than its minimum size. If no uniform grid fits every selected window, the extension restores their previous positions, sizes, and maximized, fullscreen, or minimized states.
+
+### How does window tiling work on a portrait monitor?
+
+The default setting stacks windows top to bottom in one full-height column. A positive `portrait-minimum-tile-height` wraps additional windows into another column when the current column would become too short.
+
+### Can a desktop launcher tile windows in the background?
+
+Yes. The `TileWindowGroup` and `TileWindowGroups` D-Bus methods accept X11 window IDs and place groups without changing focus or cycling the current layout.
+
+## Disclaimer and safety
 
 This software is provided under the MIT License on an **“as is”** basis, without warranties of any kind. To the maximum extent permitted by applicable law, the authors and copyright holders shall not be liable for any claims, damages, losses, or other liability arising from the use of this software.
 
@@ -358,3 +389,7 @@ You are solely responsible for determining whether this software is suitable, sa
 The authors and copyright holders make no guarantees regarding security, reliability, availability, correctness, compliance, non-infringement, or fitness for any particular purpose.
 
 This notice is intended to clarify the nature of the project and does not impose additional restrictions beyond the MIT License.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for the full terms.

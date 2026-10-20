@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="145" height="28" viewBox="0 0 145 28" role="img" aria-labelledby="title description">
+  <title id="title">Open issues: 0</title>
+  <desc id="description">GitHub reported zero open issues on 2026-10-20.</desc>
+  <rect width="145" height="28" rx="4" fill="#475569"/>
+  <path d="M4 0h69v28H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4z" fill="#334155"/>
+  <path d="M73 0h68a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H73z" fill="#278a63"/>
+  <text x="39" y="18.5" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="11">Open issues</text>
+  <text x="109" y="18.5" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="11" font-weight="700">0</text>
+</svg>

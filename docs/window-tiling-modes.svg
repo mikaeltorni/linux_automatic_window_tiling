@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="560" viewBox="0 0 1280 560" role="img" aria-labelledby="title description">
+  <title id="title">Keyboard-triggered GNOME Shell window tiling</title>
+  <desc id="description">Super plus T arranges three windows from the focused application. Control plus Shift plus T arranges eligible windows from several applications. Both modes stay on the current workspace and monitor.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101c2e"/>
+      <stop offset="1" stop-color="#1b2d46"/>
+    </linearGradient>
+    <linearGradient id="focused" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#69dbbd"/>
+      <stop offset="1" stop-color="#3aaed8"/>
+    </linearGradient>
+    <linearGradient id="other" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9b8afb"/>
+      <stop offset="1" stop-color="#617deb"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="560" rx="28" fill="url(#background)"/>
+  <text x="64" y="76" fill="#f1f6ff" font-family="Inter,Arial,sans-serif" font-size="32" font-weight="700">Two shortcut-driven tiling modes</text>
+  <text x="64" y="112" fill="#b8c8dc" font-family="Inter,Arial,sans-serif" font-size="18">Both act on the current workspace and monitor; windows outside that scope stay put.</text>
+
+  <g>
+    <rect x="56" y="148" width="560" height="350" rx="20" fill="#f7f9fc"/>
+    <text x="84" y="190" fill="#15243a" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="700">Focused application</text>
+    <rect x="84" y="210" width="210" height="38" rx="19" fill="#d7f5ec"/>
+    <text x="189" y="235" text-anchor="middle" fill="#116653" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="700">Super + T</text>
+    <rect x="84" y="268" width="504" height="196" rx="12" fill="#dce5ef" stroke="#9aaec2" stroke-width="2"/>
+    <rect x="84" y="268" width="504" height="27" rx="12" fill="#263b55"/>
+    <circle cx="101" cy="281" r="4" fill="#fb7185"/>
+    <circle cx="116" cy="281" r="4" fill="#fbbf24"/>
+    <circle cx="131" cy="281" r="4" fill="#34d399"/>
+    <rect x="103" y="310" width="222" height="67" rx="8" fill="url(#focused)"/>
+    <rect x="347" y="310" width="222" height="67" rx="8" fill="url(#focused)"/>
+    <rect x="103" y="391" width="222" height="54" rx="8" fill="url(#focused)"/>
+    <text x="214" y="349" text-anchor="middle" fill="#0d2934" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700">Terminal</text>
+    <text x="458" y="349" text-anchor="middle" fill="#0d2934" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700">Terminal</text>
+    <text x="214" y="424" text-anchor="middle" fill="#0d2934" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700">Terminal</text>
+    <text x="84" y="485" fill="#42566e" font-family="Inter,Arial,sans-serif" font-size="15">Windows from the focused app share a balanced grid.</text>
+  </g>
+
+  <g>
+    <rect x="664" y="148" width="560" height="350" rx="20" fill="#f7f9fc"/>
+    <text x="692" y="190" fill="#15243a" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="700">All eligible applications</text>
+    <rect x="692" y="210" width="250" height="38" rx="19" fill="#e4e4ff"/>
+    <text x="817" y="235" text-anchor="middle" fill="#433795" font-family="Inter,Arial,sans-serif" font-size="17" font-weight="700">Ctrl + Shift + T</text>
+    <rect x="692" y="268" width="504" height="196" rx="12" fill="#dce5ef" stroke="#9aaec2" stroke-width="2"/>
+    <rect x="692" y="268" width="504" height="27" rx="12" fill="#263b55"/>
+    <circle cx="709" cy="281" r="4" fill="#fb7185"/>
+    <circle cx="724" cy="281" r="4" fill="#fbbf24"/>
+    <circle cx="739" cy="281" r="4" fill="#34d399"/>
+    <rect x="711" y="310" width="222" height="61" rx="8" fill="url(#focused)"/>
+    <rect x="955" y="310" width="222" height="61" rx="8" fill="url(#other)"/>
+    <rect x="711" y="386" width="222" height="59" rx="8" fill="url(#other)"/>
+    <rect x="955" y="386" width="222" height="59" rx="8" fill="url(#focused)"/>
+    <text x="822" y="347" text-anchor="middle" fill="#0d2934" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700">Terminal</text>
+    <text x="1066" y="347" text-anchor="middle" fill="#171d45" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700">Browser</text>
+    <text x="822" y="422" text-anchor="middle" fill="#171d45" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700">Files</text>
+    <text x="1066" y="422" text-anchor="middle" fill="#0d2934" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700">Editor</text>
+    <text x="692" y="485" fill="#42566e" font-family="Inter,Arial,sans-serif" font-size="15">Eligible windows from different apps share one grid.</text>
+  </g>
+
+  <text x="640" y="536" text-anchor="middle" fill="#b8c8dc" font-family="Inter,Arial,sans-serif" font-size="15">Illustration of the two default keybindings; window placement depends on the available work area and app size limits.</text>
+</svg>

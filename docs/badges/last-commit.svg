@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="195" height="28" viewBox="0 0 195 28" role="img" aria-labelledby="title description">
+  <title id="title">Last commit: 2026-10-20</title>
+  <desc id="description">Published master commit 4d3842c, measured on 2026-10-20.</desc>
+  <rect width="195" height="28" rx="4" fill="#475569"/>
+  <path d="M4 0h83v28H4a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4z" fill="#334155"/>
+  <path d="M87 0h104a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H87z" fill="#168aad"/>
+  <text x="43" y="18.5" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="11">Last commit</text>
+  <text x="141" y="18.5" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="11" font-weight="700">2026-10-20</text>
+</svg>
