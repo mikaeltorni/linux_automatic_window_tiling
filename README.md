@@ -54,7 +54,9 @@ See the full cross-repository map in
 - Application minimum sizes can force a less dense grid. For example, three
   GNOME Terminal windows on a small VM display use a 2x2 grid when three
   columns would overlap. Character-cell resize increments can leave small gaps.
-  If no grid can fit the application minimum sizes, the journal reports it.
+  If no uniform grid can fit the application minimum sizes, the original
+  window positions, sizes, and maximized/fullscreen/minimized states are restored.
+  The journal explains why the request could not fit.
 - Kitty uses a 1300px preferred width to choose grid density on wide monitors,
   and windows are requested to fill their complete cells subject to application
   size constraints.
@@ -221,6 +223,16 @@ Super+Y binding):
 mapfile -t window_ids < <(xdotool search --onlyvisible --desktop "$(xdotool get_desktop)" --class Gnome-terminal)
 python3 tests/check_vm_tiling.py --key super+t --windows "${window_ids[@]}"
 python3 tests/check_vm_tiling.py --key ctrl+shift+t --windows "${window_ids[@]}"
+```
+
+For a window set known to exceed the available grid capacity, add
+`--expect-unchanged`. This checks that two repeated requests preserve the
+original geometry instead of leaving partially placed windows off-screen.
+Pass every eligible window ID, including other applications for the all-window
+shortcut. Replace the `ID1` placeholders with numeric X11 window IDs:
+
+```bash
+python3 tests/check_vm_tiling.py --expect-unchanged --key ctrl+shift+t --windows ID1 ID2 ID3 ID4
 ```
 
 ## Integration
