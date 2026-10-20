@@ -931,7 +931,8 @@ def test_super_t_tiles_maximized_windows_and_preserves_selection_and_cycling(
     functions = "\n".join(
         [_extract_function(window_source, name) for name in [
             "getFocusWindow", "canTileWindow", "getWindowApplicationId",
-            "getTileGroupKey", "isTileCandidate", "prepareWindow", "placeWindowInTile", "raiseWindow",
+            "getTileGroupKey", "isTileCandidate", "prepareWindow", "placeWindowInTile",
+            "captureWindowState", "restoreWindowState", "raiseWindow",
         ]]
         + [_extract_function(extension_source, name) for name in [
             "parseApplicationPreferredWidths", "getApplicationPreferredWidth",

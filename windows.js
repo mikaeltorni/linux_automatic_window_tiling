@@ -215,6 +215,45 @@ export function placeWindowInTile(win, tile) {
 }
 
 /**
+ * Capture the geometry and states a tiling attempt may change.
+ * Parameters: win - eligible window to snapshot before any placement.
+ * Returns: the original frame, maximization flags, fullscreen and minimized states.
+ */
+export function captureWindowState(win) {
+  console.log('captureWindowState parameters', { win });
+  const result = {
+    frame: typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null,
+    maximized: typeof win.get_maximized === 'function' ? win.get_maximized() : 0,
+    fullscreen: typeof win.is_fullscreen === 'function' ? win.is_fullscreen() : Boolean(win.fullscreen),
+    minimized: Boolean(win.minimized),
+  };
+  console.log(result);
+  return result;
+}
+
+/**
+ * Restore a window after client limits reject every candidate grid.
+ * Parameters: win - eligible window; state - snapshot taken before the attempt.
+ * Returns: undefined after restoring its frame and previous window states.
+ */
+export function restoreWindowState(win, state) {
+  console.log('restoreWindowState parameters', { win, state });
+  if (state.frame) {
+    placeWindowInTile(win, state.frame);
+  }
+  if (state.maximized && typeof win.maximize === 'function') {
+    win.maximize(state.maximized);
+  }
+  if (state.fullscreen && typeof win.make_fullscreen === 'function') {
+    win.make_fullscreen();
+  }
+  if (state.minimized && typeof win.minimize === 'function') {
+    win.minimize();
+  }
+  console.log(undefined);
+}
+
+/**
  * Raise a window and mark it as the most recently used on its workspace.
  *
  * Prefers the workspace-scoped API and falls back to the global variant when

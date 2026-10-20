@@ -1,9 +1,10 @@
-"""Public hotkey regressions for the observed GNOME Terminal X11 geometry."""
+"""Public hotkey regressions for observed X11 client size constraints."""
 
 import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,14 +13,15 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run_hotkey(binding, count, portrait=False):
-    """Run the real extension lifecycle and hotkey with constrained X11 windows.
+def run_hotkey(binding, count, portrait=False, infeasible=False):
+    """Run the real lifecycle and hotkey with terminal and oversized X11 clients.
 
-    Parameters: binding - public keybinding name; count - number of terminal windows;
+    Parameters: binding - public keybinding name; count - number of windows;
     portrait - use a portrait monitor with a configured 900px minimum tile height.
-    Returns: the frames after the first and second public hotkey invocations.
+    infeasible - include an oversized client and maximized/fullscreen/minimized states.
+    Returns: the original and resulting frames and states after two public hotkey invocations.
     """
-    print(f"binding={binding}, count={count}, portrait={portrait}")
+    print(f"binding={binding}, count={count}, portrait={portrait}, infeasible={infeasible}")
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is required for the extension hotkey regression")
@@ -46,21 +48,36 @@ const Gio = {
   bus_own_name_on_connection: () => 1, bus_unown_name: () => {},
 };
 const workArea = { x: 66, y: 32, width: AREA_WIDTH, height: AREA_HEIGHT };
+const infeasible = INFEASIBLE;
 const workspace = { get_work_area_for_monitor: () => workArea, list_windows: () => windows };
 const makeWindow = id => {
   const window = {
     frame: { x: id === 1 ? 66 : 358, y: id === 1 ? 32 : 37, width: 474, height: 731 },
-    get_gtk_application_id: () => 'org.gnome.terminal',
+    maximized: 0, fullscreen: false, minimized: false,
+    get_gtk_application_id: () => infeasible && id === 4 ? FINAL_APP_ID : 'org.gnome.terminal',
     get_monitor: () => 0, get_workspace: () => workspace,
     get_stable_sequence: () => id, get_window_type: () => Meta.WindowType.NORMAL,
     is_skip_taskbar: () => false, allows_resize: () => true, allows_move: () => true,
-    get_maximized: () => 0, unmake_fullscreen: () => {}, unminimize: () => {},
+    get_maximized: () => window.maximized,
+    unmaximize: () => { window.maximized = 0; },
+    maximize: flags => { window.maximized = flags; window.frame = { ...workArea }; },
+    unmake_fullscreen: () => { window.fullscreen = false; },
+    make_fullscreen: () => {
+      window.fullscreen = true;
+      window.frame = { x: 0, y: 0, width: 1024, height: 768 };
+    },
+    unminimize: () => { window.minimized = false; },
+    minimize: () => { window.minimized = true; },
     get_frame_rect: () => ({ ...window.frame }),
     // Observed VM behavior: resizing honors terminal increments/minimums, but
     // the combined request leaves the old position until an explicit move.
     move_resize_frame: (user, x, y, width, height) => {
       window.frame.width = Math.max(354, Math.floor((width - 14) / 10) * 10 + 14);
       window.frame.height = Math.max(93, Math.floor((height - 49) / 22) * 22 + 49);
+      if (infeasible && id === 4) {
+        window.frame.width = Math.max(360, width);
+        window.frame.height = Math.max(380, height);
+      }
     },
     move_frame: (user, x, y) => { window.frame.x = x; window.frame.y = y; },
     raise_and_make_recent_on_workspace: () => {},
@@ -68,18 +85,30 @@ const makeWindow = id => {
   return window;
 };
 const windows = Array.from({ length: WINDOW_COUNT }, (_, index) => makeWindow(index + 1));
+if (infeasible) {
+  windows[1].maximize(3);
+  windows[2].make_fullscreen();
+  windows[3].minimize();
+}
+const state = () => windows.map(window => ({
+  maximized: window.maximized, fullscreen: window.fullscreen, minimized: window.minimized,
+}));
+const initial = windows.map(window => ({ ...window.frame }));
+const initialStates = state();
 global.display = { focus_window: windows[0] };
 global.workspace_manager = { get_active_workspace: () => workspace };
-'''.replace("WINDOW_COUNT", str(count)).replace("AREA_WIDTH", str(1500 if portrait else 958)).replace("AREA_HEIGHT", str(3840 if portrait else 736)).replace("PORTRAIT_MINIMUM", str(900 if portrait else 0))
+'''.replace("WINDOW_COUNT", str(count)).replace("AREA_WIDTH", str(1500 if portrait else 958)).replace("AREA_HEIGHT", str(3840 if portrait else 736)).replace("PORTRAIT_MINIMUM", str(900 if portrait else 0)).replace("INFEASIBLE", str(infeasible).lower()).replace("FINAL_APP_ID", json.dumps("org.gnome.Nautilus" if binding == "tile-all-windows" else "org.gnome.terminal"))
     invocation = f'''
 const extension = new AutomaticWindowTilingExtension();
 extension.enable();
 handlers.get({json.dumps(binding)})();
 const first = windows.map(window => ({{ ...window.frame }}));
+const firstStates = state();
 handlers.get({json.dumps(binding)})();
 const second = windows.map(window => ({{ ...window.frame }}));
+const secondStates = state();
 extension.disable();
-process.stdout.write(JSON.stringify({{ first, second }}));
+process.stdout.write(JSON.stringify({{ initial, initialStates, first, firstStates, second, secondStates }}));
 '''
     completed = subprocess.run(
         [node, "-e", stubs + "\n" + "\n".join(modules) + invocation],
@@ -130,4 +159,48 @@ def test_hotkeys_preserve_a_feasible_configured_portrait_grid(binding):
     ]
     assert result["first"] == first
     assert result["second"] == first[-1:] + first[:-1]
+    print(None)
+
+
+@pytest.mark.parametrize("binding", ["tile-focused-application-windows", "tile-all-windows"])
+def test_infeasible_hotkeys_restore_original_geometry_and_window_states(binding):
+    """Preserve the original layout and states when client minimums cannot fit.
+
+    Parameters: binding - same-app or mixed-app public handler selected during enable.
+    Returns: None.
+    """
+    print(f"binding={binding}")
+    result = run_hotkey(binding, 4, infeasible=True)
+    assert result["initialStates"] == [
+        {"maximized": 0, "fullscreen": False, "minimized": False},
+        {"maximized": 3, "fullscreen": False, "minimized": False},
+        {"maximized": 0, "fullscreen": True, "minimized": False},
+        {"maximized": 0, "fullscreen": False, "minimized": True},
+    ]
+    assert result["first"] == result["initial"]
+    assert result["second"] == result["initial"]
+    assert result["firstStates"] == result["initialStates"]
+    assert result["secondStates"] == result["initialStates"]
+    print(None)
+
+
+@pytest.mark.parametrize("arguments", [
+    [],
+    ["--expect-unchanged", "--key", "super+y"],
+    ["--expect-unchanged", "--key", "super+y", "--windows", "invalid"],
+    ["--unknown", "--key", "super+y", "--windows", "1", "2"],
+])
+def test_vm_checker_rejects_malformed_arguments_before_desktop_access(arguments):
+    """Reject malformed checker commands without invoking any desktop utilities.
+
+    Parameters: arguments - missing, unknown or incorrectly typed CLI arguments.
+    Returns: None.
+    """
+    print(f"arguments={arguments}")
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "tests/check_vm_tiling.py"), *arguments],
+        capture_output=True, text=True,
+    )
+    assert completed.returncode == 2, (arguments, completed.stdout, completed.stderr)
+    assert "usage:" in completed.stderr, (arguments, completed.stderr)
     print(None)
