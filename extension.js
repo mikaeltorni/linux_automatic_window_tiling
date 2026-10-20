@@ -23,13 +23,13 @@ import Meta from 'gi://Meta';
 import Gio from 'gi://Gio';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { calculateTileRect, chooseGrid, cycleTiledOrder, detectTiledOrder } from './layout.js';
+import { calculateTileRect, chooseGrid, constrainGridToWindowSize, cycleTiledOrder, detectTiledOrder, minimumSizeAfterPlacement } from './layout.js';
 import {
   getFocusWindow,
   getTileGroupKey,
   getWindowApplicationId,
   isTileCandidate,
-  prepareWindow,
+  placeWindowInTile,
   raiseWindow,
 } from './windows.js';
 
@@ -176,16 +176,17 @@ function getApplicationPreferredWidth(applicationId, matchers) {
  * order is rotated by one cell instead of being re-applied, so repeatedly
  * tapping either accelerator cycles through the possible arrangements.
  *
- * @param {string} mode - Log label describing the tiling mode.
- * @param {Meta.Window|null} anchorWindow - Window selecting the tile group and monitor.
- * @param {string|null} applicationId - Anchor application identity for the
- *   original same-application mode, or null for all applications.
- * @param {boolean} background - Use the anchor workspace and preserve focus/order.
- * @returns {void}
+ * Client minimum sizes can require a less dense grid. Cycling compares the
+ * original frames against the final feasible grid before applying its order.
+ * Parameters: mode - log label; anchorWindow - window selecting workspace and monitor;
+ * applicationId - application identity or null for all apps; background - preserve focus and order.
+ * Returns: undefined after placement or an ignored request.
  */
 function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, background = false) {
+  console.log('tileWindowsOnMonitor parameters', { mode, anchorWindow, applicationId, background });
   if (!anchorWindow || typeof anchorWindow.get_monitor !== 'function') {
     log.info(`no tileable focused window; ignoring ${mode} tiling request`);
+    console.log(undefined);
     return;
   }
 
@@ -212,6 +213,7 @@ function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, backgrou
     }
     if (windows.length === 0 || workArea.width <= 0 || workArea.height <= 0) {
       log.info(`nothing to tile (windows=${windows.length} workArea=${workArea.width}x${workArea.height})`);
+      console.log(undefined);
       return;
     }
 
@@ -222,22 +224,33 @@ function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, backgrou
     log.info(
       `mode=${mode} applicationId=${applicationId ?? 'all'} tileGroup=${tileGroup} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`,
     );
-    const { rows, columns } = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
+    let grid = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
     const frames = windows.map(win => (typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null));
-    const tiledOrder = background ? null : detectTiledOrder(frames, rows, columns, workArea);
-    const ordered = tiledOrder
-      ? cycleTiledOrder(tiledOrder).map(windowIndex => windows[windowIndex])
-      : windows;
-    log.info(`grid=${rows}x${columns} mode=${tiledOrder ? 'cycle' : 'tile'}`);
+    let minimumSize = { width: 0, height: 0 };
+    const attemptedGrids = new Set();
+    while (!attemptedGrids.has(`${grid.rows}:${grid.columns}`)) {
+      attemptedGrids.add(`${grid.rows}:${grid.columns}`);
+      const { rows, columns } = grid;
+      const tiledOrder = background ? null : detectTiledOrder(frames, rows, columns, workArea);
+      const ordered = tiledOrder
+        ? cycleTiledOrder(tiledOrder).map(windowIndex => windows[windowIndex])
+        : windows;
+      log.info(`grid=${rows}x${columns} mode=${tiledOrder ? 'cycle' : 'tile'}`);
 
-    for (let index = 0; index < ordered.length; index++) {
-      const win = ordered[index];
-      const tile = calculateTileRect(index, rows, columns, workArea);
+      for (let index = 0; index < ordered.length; index++) {
+        const win = ordered[index];
+        const tile = calculateTileRect(index, rows, columns, workArea);
+        const frame = placeWindowInTile(win, tile);
+        minimumSize = minimumSizeAfterPlacement(frame, tile, minimumSize);
+        log.info(`requested ${tile.x},${tile.y} ${tile.width}x${tile.height} -> actual ${frame ? `${frame.x},${frame.y} ${frame.width}x${frame.height}` : 'unknown'}`);
+      }
 
-      prepareWindow(win);
-      win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height);
-      const frame = typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null;
-      log.info(`requested ${tile.width}x${tile.height} -> actual ${frame ? `${frame.width}x${frame.height}` : 'unknown'}`);
+      const nextGrid = constrainGridToWindowSize(windows.length, workArea, grid, minimumSize);
+      if (!nextGrid) {
+        log.warn('client minimum sizes prevent all windows fitting in the work area');
+        break;
+      }
+      grid = nextGrid;
     }
 
     if (!background) {
@@ -246,6 +259,7 @@ function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, backgrou
   } catch (error) {
     log.error(`failed to tile application windows: ${error}`);
   }
+  console.log(undefined);
 }
 
 /** Tile each actual workspace/monitor represented by X11 windows once. */

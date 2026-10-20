@@ -195,6 +195,26 @@ export function prepareWindow(win) {
 }
 
 /**
+ * Resize a window to its cell and explicitly finish moving its frame origin.
+ *
+ * X11 clients can accept a constrained size while retaining their old origin
+ * after a combined request. Reassert the frame position after resizing.
+ * Parameters: win - eligible window; tile - requested x, y, width and height.
+ * Returns: the accepted frame rectangle, or null when it cannot be read.
+ */
+export function placeWindowInTile(win, tile) {
+  console.log('placeWindowInTile parameters', { win, tile });
+  prepareWindow(win);
+  win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height);
+  if (typeof win.move_frame === 'function') {
+    win.move_frame(true, tile.x, tile.y);
+  }
+  const result = typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null;
+  console.log(result);
+  return result;
+}
+
+/**
  * Raise a window and mark it as the most recently used on its workspace.
  *
  * Prefers the workspace-scoped API and falls back to the global variant when

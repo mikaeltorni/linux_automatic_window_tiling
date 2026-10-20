@@ -96,6 +96,61 @@ export function chooseGrid(windowCount, workArea, preferredWidth, portraitMinimu
 }
 
 /**
+ * Record minimum dimensions revealed when a client refuses a smaller cell.
+ * Parameters: frame - accepted frame or null; tile - requested cell; minimumSize - limits already observed.
+ * Returns: the accumulated width and height lower bounds.
+ */
+export function minimumSizeAfterPlacement(frame, tile, minimumSize) {
+  console.log('minimumSizeAfterPlacement parameters', { frame, tile, minimumSize });
+  const result = {
+    width: frame && frame.width > tile.width + 1
+      ? Math.max(minimumSize.width, frame.width) : minimumSize.width,
+    height: frame && frame.height > tile.height + 1
+      ? Math.max(minimumSize.height, frame.height) : minimumSize.height,
+  };
+  console.log(result);
+  return result;
+}
+
+/**
+ * Check whether every window can occupy a cell with the observed size limits.
+ * Parameters: grid - candidate dimensions; windowCount - windows to place; workArea - usable rectangle; minimumSize - observed size lower bounds.
+ * Returns: whether the grid has enough cells of sufficient size.
+ */
+function gridFitsWindowSize(grid, windowCount, workArea, minimumSize) {
+  console.log('gridFitsWindowSize parameters', { grid, windowCount, workArea, minimumSize });
+  const result = grid.rows > 0 && grid.columns > 0
+    && grid.rows * grid.columns >= windowCount
+    && Math.floor(workArea.width / grid.columns) >= minimumSize.width
+    && Math.floor(workArea.height / grid.rows) >= minimumSize.height;
+  console.log(result);
+  return result;
+}
+
+/**
+ * Retain the preferred density while making cells fit observed client limits.
+ * Parameters: windowCount - windows to place; workArea - usable rectangle; grid - preferred dimensions; minimumSize - observed size lower bounds.
+ * Returns: feasible grid dimensions, or null when the windows cannot all fit.
+ */
+export function constrainGridToWindowSize(windowCount, workArea, grid, minimumSize) {
+  console.log('constrainGridToWindowSize parameters', { windowCount, workArea, grid, minimumSize });
+  const maxColumns = minimumSize.width > 0
+    ? Math.max(1, Math.floor(workArea.width / minimumSize.width)) : windowCount;
+  const maxRows = minimumSize.height > 0
+    ? Math.max(1, Math.floor(workArea.height / minimumSize.height)) : windowCount;
+  let columns = Math.min(grid.columns, maxColumns);
+  let rows = Math.ceil(windowCount / columns);
+  if (rows > maxRows) {
+    rows = maxRows;
+    columns = Math.ceil(windowCount / rows);
+  }
+  const candidate = { rows, columns };
+  const result = gridFitsWindowSize(candidate, windowCount, workArea, minimumSize) ? candidate : null;
+  console.log(result);
+  return result;
+}
+
+/**
  * Compute the full grid cell assigned to one tiled window.
  *
  * Integer boundaries are calculated from the work-area edges so adjacent
