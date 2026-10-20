@@ -47,12 +47,17 @@ See the full cross-repository map in
 - Ctrl+Shift+T includes every eligible application on the focused window's
   workspace and monitor, using one balanced grid for the mixed window set.
 - One window fills the monitor work area.
-- Two windows tile left/right.
-- Four windows use a 2x2 grid.
+- Two windows tile left/right when their minimum widths fit.
+- Four windows start with a 2x2 grid.
 - On a portrait (taller-than-wide) monitor, windows stack top-to-bottom in a single full-width column (two windows are top and bottom, a third continues below and is never cut in half); a configurable minimum tile height keeps a window usable before the next one wraps into a column to the right.
 - Other counts use a balanced calculated grid.
+- Application minimum sizes can force a less dense grid. For example, three
+  GNOME Terminal windows on a small VM display use a 2x2 grid when three
+  columns would overlap. Character-cell resize increments can leave small gaps.
+  If no grid can fit the application minimum sizes, the journal reports it.
 - Kitty uses a 1300px preferred width to choose grid density on wide monitors,
-  but tiled windows always expand to fill their complete grid cells.
+  and windows are requested to fill their complete cells subject to application
+  size constraints.
 - GNOME's work area is used, excluding panels and docks.
 - Pressing the accelerator again while the windows already fill the grid rotates
   them by one cell instead of re-tiling them into the same places, so tapping
@@ -145,15 +150,19 @@ The installer can run directly as the desktop user or through `sudo`. When run
 through `sudo`, it uses `SUDO_USER` to install into that user's local GNOME
 Shell extension directory and apply settings through the user's session bus. It
 requires `glib-compile-schemas` (Ubuntu package `libglib2.0-bin`) and builds the
-`awt-tools` Rust helper during installation. Provide Cargo, or Docker/Podman for
-the container build fallback. When the shared framework is not checked out as a
+`awt-tools` Rust helper during installation. Provide a current stable Rust/Cargo
+toolchain, or Docker/Podman for the container build fallback. Ubuntu 24.04's
+distribution Cargo 1.75 cannot read the checked-in lockfile; use a current
+toolchain through rustup instead. When the shared framework is not checked out as a
 sibling, Git credentials must permit cloning
 `linux_installation_scripts_functions`.
 
 GSettings accelerator changes apply live. If edited extension JavaScript needs
-a Shell reload, use GNOME's in-place run-dialog reload on X11:
+a Shell reload, install the automation tool if missing and use GNOME's in-place
+run-dialog reload on X11:
 
 ```bash
+command -v xdotool || sudo apt install -y xdotool
 xdotool key --clearmodifiers alt+F2
 sleep 0.5
 xdotool type 'r'
@@ -169,7 +178,8 @@ Runtime modules:
 
 - `extension.js` owns tiling orchestration, logging, and extension lifecycle.
 - `layout.js` owns pure grid selection and tile geometry calculations.
-- `windows.js` owns GNOME window selection, identity, and state management.
+- `windows.js` owns GNOME window selection, identity, state management, and final
+  frame placement after resizing.
 
 Run the complete local test and build checks:
 
@@ -191,6 +201,27 @@ glib-compile-schemas --strict schemas
 ```
 
 The compiled `schemas/gschemas.compiled` file is generated and ignored.
+
+### Live X11 VM regression
+
+`tests/check_vm_tiling.py` checks actual GTK window frames after pressing a
+configured shortcut twice. It verifies that windows fit the work area without
+overlap and that a second press rotates their positions. It moves the selected
+windows, so use a dedicated test workspace with at least two GNOME Terminal
+windows on the same monitor. For the all-window shortcut, include every eligible
+window in that workspace. The checker requires Python 3, `xdotool`, `xprop`,
+and `xwininfo` (the latter two are in Ubuntu's `x11-utils` package).
+
+Run inside the VM's X11 desktop, or an SSH shell using that desktop's display,
+X authority, runtime directory, and session bus. Use the installed bindings for
+`--key`; these examples use the defaults (`super+y` is valid for a customized
+Super+Y binding):
+
+```bash
+mapfile -t window_ids < <(xdotool search --onlyvisible --desktop "$(xdotool get_desktop)" --class Gnome-terminal)
+python3 tests/check_vm_tiling.py --key super+t --windows "${window_ids[@]}"
+python3 tests/check_vm_tiling.py --key ctrl+shift+t --windows "${window_ids[@]}"
+```
 
 ## Integration
 
