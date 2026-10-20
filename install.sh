@@ -31,15 +31,19 @@ source "$SCRIPT_DIR/lib/installer_logging.sh"
 # Parse binding options away from component-framework arguments while preserving
 # the legacy positional focused-app accelerator. Environment overrides count as
 # explicit values so interactive capture cannot replace them.
-# Parameters: "$@" - raw installer arguments. Returns: 0 with binding globals and
-# framework arguments populated; 2 when a binding option has no value.
+# Parameters: "$@" - raw installer arguments. Returns: 0 with binding globals,
+# standalone selector/action and intact framework arguments; 2 for malformed input.
 parse_binding() {
   printf 'parse_binding parameters=%s\n' "$*" >&2
   FRAMEWORK_ARGS=()
+  AWT_STANDALONE=0
+  AWT_STANDALONE_ACTION=install
   [[ -n "${AWT_BINDING:-}" ]] && AWT_BINDING_EXPLICIT=1
   [[ -n "${AWT_ALL_BINDING:-}" ]] && AWT_ALL_BINDING_EXPLICIT=1
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --standalone)
+        AWT_STANDALONE=1; shift ;;
       --binding)
         if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == -* ]]; then
           usage >&2
@@ -83,6 +87,19 @@ parse_binding() {
         AWT_BINDING="$1"; AWT_BINDING_EXPLICIT=1; shift ;;
     esac
   done
+  if [[ "$AWT_STANDALONE" == 1 ]]; then
+    for argument in "${FRAMEWORK_ARGS[@]}"; do
+      case "$argument" in
+        --help|-h) AWT_STANDALONE_ACTION=help ;;
+        --default|--all) ;;
+        *)
+          printf 'Standalone mode accepts binding options, --default, --all and --help; component controls require bundle mode.\n' >&2
+          printf 'parse_binding return=2\n' >&2
+          return 2 ;;
+      esac
+    done
+    FRAMEWORK_ARGS=()
+  fi
   printf 'parse_binding return=0\n' >&2
   return 0
 }
@@ -93,6 +110,8 @@ usage() {
   printf 'usage parameters=none\n' >&2
   cat <<'EOF'
 Usage:
+  bash install.sh --standalone         Install without the shared framework
+  bash install.sh --standalone --binding '<Super>y' --all-binding '<Super><Shift>y'
   bash install.sh                      Interactive component menu (TTY)
   bash install.sh '<Super>t'           Deploy and install default components
   bash install.sh --binding '<Control><Alt>t'
@@ -169,17 +188,22 @@ load_component_framework() {
   isc_activate_components
 }
 
-# Parse once and delegate selection, queries and core installation to the framework.
+# Parse once and route standalone installation or framework-owned actions.
 # Parameters: "$@" - raw installer arguments. Returns: 0 after a successful
 # installation or framework action; nonzero for parser, environment or framework errors.
 main() {
   printf 'main parameters=%s\n' "$*" >&2
-  local result
+  local result operation=component_main
   parse_binding "$@" || {
     result=$?
     printf 'main return=%s\n' "$result" >&2
     return "$result"
   }
+  if [[ "$AWT_STANDALONE_ACTION" == help ]]; then
+    usage
+    printf 'main return=0\n' >&2
+    return 0
+  fi
 
   # A delegated invocation (linux_hotkey_setup) passes only the tiling binding
   # and no component selection. With no selection flag, component_main drops into
@@ -188,7 +212,7 @@ main() {
   # a bare binding is "deploy and install default components", so when a binding
   # was given explicitly and no framework selection was supplied, run defaults
   # non-interactively.
-  if [[ -n "${AWT_BINDING_EXPLICIT:-}${AWT_ALL_BINDING_EXPLICIT:-}" \
+  if [[ "$AWT_STANDALONE" == 0 && -n "${AWT_BINDING_EXPLICIT:-}${AWT_ALL_BINDING_EXPLICIT:-}" \
     && ${#FRAMEWORK_ARGS[@]} -eq 0 ]]; then
     FRAMEWORK_ARGS=(--default)
   fi
@@ -197,14 +221,18 @@ main() {
 
   # The framework invokes ISC_CORE only for installation. Queries, invalid
   # commands and uninstall must never deploy or enable the extension first.
-  load_component_framework
+  if [[ "$AWT_STANDALONE" == 1 ]]; then
+    operation=awt_install_standalone
+  else
+    load_component_framework
+  fi
   # shellcheck source=lib/awt_bin.sh
   source "$SCRIPT_DIR/lib/awt_bin.sh"
   # shellcheck source=lib/tiling_setup.sh
   source "$SCRIPT_DIR/lib/tiling_setup.sh"
   # shellcheck source=installer/components.sh
   source "$SCRIPT_DIR/installer/components.sh"
-  if component_main "${FRAMEWORK_ARGS[@]}"; then
+  if "$operation" "${FRAMEWORK_ARGS[@]}"; then
     result=0
   else
     result=$?

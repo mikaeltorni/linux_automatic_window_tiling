@@ -162,6 +162,25 @@ awt_install_core() {
   return 0
 }
 
+# Install the extension and all three tunings without an external component runtime.
+# Parameters: none; tunings come from parsed AWT_* values and existing defaults.
+# Returns: 0 after installation, or the first failed operation's status.
+awt_install_standalone() {
+  printf 'awt_install_standalone parameters=none\n' >&2
+  local operation result
+  for operation in awt_install_core awt_configure_keybinding awt_configure_app_widths awt_configure_portrait_stacking; do
+    if "$operation"; then
+      :
+    else
+      result=$?
+      printf 'awt_install_standalone return=%s\n' "$result" >&2
+      return "$result"
+    fi
+  done
+  printf 'awt_install_standalone return=0\n' >&2
+  return 0
+}
+
 # Apply the focused-app and monitor-wide accelerators through the shared capture
 # helper when no scripted value was supplied; write both GSettings keys.
 # Parameters: none; values come from AWT_BINDING, AWT_ALL_BINDING and the shared
@@ -184,7 +203,11 @@ awt_configure_keybinding() {
     [[ -n "$typed_all" ]] && AWT_ALL_BINDING="$typed_all"
   fi
   installer_log "applying accelerator $AWT_BINDING for $BINDING_KEY"
-  awt_set_strv "$BINDING_KEY" "$AWT_BINDING"
+  awt_set_strv "$BINDING_KEY" "$AWT_BINDING" || {
+    result=$?
+    printf 'awt_configure_keybinding return=%s\n' "$result" >&2
+    return "$result"
+  }
   installer_log "applying accelerator $AWT_ALL_BINDING for $ALL_BINDING_KEY"
   awt_set_strv "$ALL_BINDING_KEY" "$AWT_ALL_BINDING"
   result=$?

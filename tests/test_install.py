@@ -662,7 +662,8 @@ def test_installer_parses_binding_and_routes_through_component_framework():
     assert "ISC_CORE=awt_install_core" in manifest
     assert "isc_activate_components" in installer
     assert 'source "$SCRIPT_DIR/installer/components.sh"' in installer
-    assert 'component_main "${FRAMEWORK_ARGS[@]}"' in installer
+    assert 'operation=component_main' in installer
+    assert '"$operation" "${FRAMEWORK_ARGS[@]}"' in installer
     print(None)
 
 
