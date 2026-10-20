@@ -1,7 +1,8 @@
 {
   "uuid": "automatic-window-tiling@local",
   "name": "Automatic Window Tiling",
-  "description": "Tile matching or all eligible application windows on the current workspace and monitor",
+  "description": "Linux Automatic Window Tiling is a GNOME Shell extension for shortcut-driven tiling of same-application windows or all eligible windows.",
+  "url": "https://github.com/mikaeltorni/linux_automatic_window_tiling",
   "settings-schema": "org.gnome.shell.extensions.automatic-window-tiling",
   "shell-version": ["45", "46", "47", "48", "49", "50"],
   "version": 1
