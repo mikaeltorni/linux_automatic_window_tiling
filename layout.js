@@ -6,6 +6,30 @@
  */
 
 /**
+ * Classify a positive value used by grid dimensions and size preferences.
+ * Parameters: value - converted dimension or optional preference.
+ * Returns: whether a positive value was supplied.
+ */
+export function isPositive(value) {
+  console.log('isPositive parameters', { value });
+  const result = value != null && value > 0;
+  console.log(result);
+  return result;
+}
+
+/**
+ * Accept a nonempty window set and usable work area before placement.
+ * Parameters: windowCount - selected window count; workArea - monitor rectangle.
+ * Returns: whether the count and both work-area dimensions are positive.
+ */
+export function canTileWorkArea(windowCount, workArea) {
+  console.log('canTileWorkArea parameters', { windowCount, workArea });
+  const result = isPositive(windowCount) && isPositive(workArea.width) && isPositive(workArea.height);
+  console.log(result);
+  return result;
+}
+
+/**
  * Compute the grid layout (rows and columns) for a set of windows.
  *
  * When a preferred tile width is configured, the column count is derived from
@@ -23,8 +47,12 @@
  *   at least that height before the next window wraps onto a column to the
  *   right.
  * @returns {{rows: number, columns: number}} The chosen grid dimensions.
+ * Parameters: windowCount - number of windows; workArea - usable rectangle;
+ * preferredWidth - optional target width; portraitMinimumTileHeight - configured portrait wrapping height.
+ * Returns: the selected row and column counts.
  */
 export function chooseGrid(windowCount, workArea, preferredWidth, portraitMinimumTileHeight = 0) {
+  console.log('chooseGrid parameters', { windowCount, workArea, preferredWidth, portraitMinimumTileHeight });
   // Portrait monitors (taller than wide) stack windows top-to-bottom in a
   // single full-width column, matching the natural vertical orientation. A
   // window stops short of the full column only when it would fall below the
@@ -34,7 +62,7 @@ export function chooseGrid(windowCount, workArea, preferredWidth, portraitMinimu
   // wide (landscape) monitors only; portrait stacking is governed solely by this
   // configurable minimum.
   if (workArea.height > workArea.width) {
-    if (portraitMinimumTileHeight > 0) {
+    if (isPositive(portraitMinimumTileHeight)) {
       // Soft minimum tile height (physical pixels): a window is never made
       // shorter than this, so once a column would drop below it the next window
       // wraps into a column to the right. A non-positive minimum (the default)
@@ -43,39 +71,53 @@ export function chooseGrid(windowCount, workArea, preferredWidth, portraitMinimu
       const maxRows = Math.max(1, Math.floor(workArea.height / portraitMinimumTileHeight));
       const rows = Math.min(windowCount, maxRows);
       const columns = Math.ceil(windowCount / rows);
-      return { rows, columns };
+      const result = { rows, columns };
+      console.log(result);
+      return result;
     }
     // No minimum: stack every window top-to-bottom in one full-height column.
-    return { rows: windowCount, columns: 1 };
+    const result = { rows: windowCount, columns: 1 };
+    console.log(result);
+    return result;
   }
 
   // The preferred width determines how many columns to target, while the
   // resulting cells still divide and consume the full work area. On a 4K
   // display (3840px), a 1300px preference yields three columns.
-  if (preferredWidth != null && preferredWidth > 0) {
+  if (isPositive(preferredWidth)) {
     // Force balanced grid for perfect-square window counts regardless of preferred width.
     const sqrt = Math.round(Math.sqrt(windowCount));
     if (sqrt * sqrt === windowCount && sqrt > 1) {
-      return { rows: sqrt, columns: sqrt };
+      const result = { rows: sqrt, columns: sqrt };
+      console.log(result);
+      return result;
     }
 
     const maxColumns = Math.max(1, Math.ceil(workArea.width / preferredWidth));
     const columns = Math.min(windowCount, maxColumns);
     const rows = Math.ceil(windowCount / columns);
-    return { rows, columns };
+    const result = { rows, columns };
+    console.log(result);
+    return result;
   }
 
   if (windowCount === 1) {
-    return { rows: 1, columns: 1 };
+    const result = { rows: 1, columns: 1 };
+    console.log(result);
+    return result;
   }
   if (windowCount === 2) {
-    return { rows: 1, columns: 2 };
+    const result = { rows: 1, columns: 2 };
+    console.log(result);
+    return result;
   }
 
   // Perfect-square counts should always produce balanced grids.
   const sqrt = Math.round(Math.sqrt(windowCount));
   if (sqrt * sqrt === windowCount && sqrt > 1) {
-    return { rows: sqrt, columns: sqrt };
+    const result = { rows: sqrt, columns: sqrt };
+    console.log(result);
+    return result;
   }
 
   let best = null;
@@ -92,7 +134,9 @@ export function chooseGrid(windowCount, workArea, preferredWidth, portraitMinimu
     }
   }
 
-  return { rows: best.rows, columns: best.columns };
+  const result = { rows: best.rows, columns: best.columns };
+  console.log(result);
+  return result;
 }
 
 /**
@@ -138,9 +182,9 @@ export function constrainGridToWindowSize(windowCount, workArea, grid, minimumSi
     console.log(grid);
     return grid;
   }
-  const maxColumns = minimumSize.width > 0
+  const maxColumns = isPositive(minimumSize.width)
     ? Math.max(1, Math.floor(workArea.width / minimumSize.width)) : windowCount;
-  const maxRows = minimumSize.height > 0
+  const maxRows = isPositive(minimumSize.height)
     ? Math.max(1, Math.floor(workArea.height / minimumSize.height)) : windowCount;
   let columns = Math.min(grid.columns, maxColumns);
   let rows = Math.ceil(windowCount / columns);

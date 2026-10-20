@@ -115,6 +115,8 @@ awt_install_core() {
   if ! install -d "$TARGET_DIR/schemas" || ! install -m 0644 \
     "$SCRIPT_DIR/extension.js" \
     "$SCRIPT_DIR/layout.js" \
+    "$SCRIPT_DIR/preferences.js" \
+    "$SCRIPT_DIR/tiling.js" \
     "$SCRIPT_DIR/metadata.json" \
     "$SCRIPT_DIR/windows.js" \
     "$TARGET_DIR/" || ! install -m 0644 \

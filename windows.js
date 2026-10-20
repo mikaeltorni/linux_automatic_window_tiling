@@ -7,6 +7,58 @@
 
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import { isPositive } from './layout.js';
+
+/**
+ * Accept an anchor with a monitor and, when requested, an application identity.
+ * Parameters: win - possible anchor; applicationId - required identity, or undefined for all apps.
+ * Returns: whether this window can identify the requested tiling scope.
+ */
+export function isTileAnchor(win, applicationId = undefined) {
+  console.log('isTileAnchor parameters', { win, applicationId });
+  const result = Boolean(win) && typeof win.get_monitor === 'function'
+    && (applicationId === undefined || Boolean(applicationId));
+  console.log(result);
+  return result;
+}
+
+/**
+ * Accept an available workspace and application identity for background grouping.
+ * Parameters: workspace - resolved workspace or null; applicationId - resolved identity or null.
+ * Returns: whether the application group can be placed on that workspace.
+ */
+export function isApplicationWorkspace(workspace, applicationId) {
+  console.log('isApplicationWorkspace parameters', { workspace, applicationId });
+  const result = Boolean(workspace) && Boolean(applicationId);
+  console.log(result);
+  return result;
+}
+
+/**
+ * Convert public X11 window identifiers without applying numeric acceptance rules.
+ * Parameters: windowIds - D-Bus string-array identifiers.
+ * Returns: original identifiers paired with converted numbers or NaN for malformed syntax.
+ */
+export function parseWindowIds(windowIds) {
+  console.log('parseWindowIds parameters', { windowIds });
+  const result = windowIds.map(raw => ({
+    raw, id: /^(?:0x[0-9a-f]+|[0-9]+)$/i.test(raw) ? Number(raw) : NaN,
+  }));
+  console.log(result);
+  return result;
+}
+
+/**
+ * Accept positive, safely represented numeric X11 window identifiers.
+ * Parameters: id - converted window identifier.
+ * Returns: whether the identifier can select a window.
+ */
+export function isValidWindowId(id) {
+  console.log('isValidWindowId parameters', { id });
+  const result = Number.isSafeInteger(id) && isPositive(id);
+  console.log(result);
+  return result;
+}
 
 /**
  * Read maximization directions through the current or legacy Mutter API.

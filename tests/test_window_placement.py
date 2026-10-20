@@ -1,13 +1,13 @@
 """Public hotkey regressions for observed X11 client size constraints."""
 
 import json
-import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from js_runtime import run_extension
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,14 +23,6 @@ def run_hotkey(binding, count, portrait=False, infeasible=False, modern=False):
     Returns: the original and resulting frames and states after two public hotkey invocations.
     """
     print(f"binding={binding}, count={count}, portrait={portrait}, infeasible={infeasible}, modern={modern}")
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node is required for the extension hotkey regression")
-    modules = []
-    for filename in ("layout.js", "windows.js", "extension.js"):
-        source = (ROOT / filename).read_text()
-        source = re.sub(r"^import[\s\S]*?;\n", "", source, flags=re.MULTILINE)
-        modules.append(source.replace("export default class", "class").replace("export function", "function"))
     stubs = r'''
 const console = { log: () => {}, warn: () => {}, error: message => { throw new Error(message); } };
 const Meta = { WindowType: { NORMAL: 1 }, KeyBindingFlags: { NONE: 0 } };
@@ -131,11 +123,7 @@ const secondStates = state();
 extension.disable();
 process.stdout.write(JSON.stringify({{ initial, initialStates, first, firstStates, second, secondStates }}));
 '''
-    completed = subprocess.run(
-        [node, "-e", stubs + "\n" + "\n".join(modules) + invocation],
-        capture_output=True, text=True, check=True,
-    )
-    result = json.loads(completed.stdout)
+    result = run_extension(stubs, invocation)
     print(result)
     return result
 
