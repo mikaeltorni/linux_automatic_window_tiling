@@ -35,6 +35,7 @@ def installer_environment(tmp_path):
         "gsettings": r'''#!/bin/bash
 printf '%s\t' "$@" >> "$AWT_TEST_EFFECTS"
 printf '\n' >> "$AWT_TEST_EFFECTS"
+if [[ -n "${AWT_TEST_FAIL_KEY:-}" && "$*" == *"$AWT_TEST_FAIL_KEY"* ]]; then exit 1; fi
 case "$*" in
   *'get org.gnome.shell enabled-extensions') printf "['existing@local']\n" ;;
 esac
@@ -228,4 +229,78 @@ def test_clean_install_and_reinstall_deploy_complete_runtime(installer_environme
     calls = effects.read_text()
     assert "tile-focused-application-windows\t['<Super>y']" in calls, calls
     assert "tile-all-windows\t['<Super><Shift>y']" in calls, calls
+    print(None)
+
+
+@pytest.mark.parametrize("arguments", [
+    ["--standalone"],
+    ["--standalone", "--binding", "<Super>y", "--all-binding", "<Super><Shift>y"],
+    ["--standalone", "--default", "<Super>y", "--all-binding=<Super><Shift>y"],
+])
+def test_standalone_install_needs_no_framework_or_git_access(installer_environment, arguments):
+    """Install and reapply the complete extension without fetching private dependencies.
+
+    Parameters: installer_environment - isolated installer fixture; arguments - public standalone form.
+    Returns: None.
+    """
+    print(f"installer_environment={installer_environment}, arguments={arguments}")
+    checkout, home, effects, environment = installer_environment
+    framework = Path(environment["ISC_FUNCTIONS_DIR"])
+    shutil.rmtree(framework)
+    git = home.parent / "bin/git"
+    git.write_text('#!/bin/bash\nprintf "network-attempt\\n" >> "$AWT_TEST_EFFECTS"\nexit 1\n')
+    git.chmod(0o755)
+    for attempt in range(2):
+        result = run_installer(installer_environment, arguments)
+        assert result.returncode == 0, (attempt, result.stdout, result.stderr)
+    target = home / ".local/share/gnome-shell/extensions/automatic-window-tiling@local"
+    for source in checkout.glob("*.js"):
+        assert (target / source.name).read_bytes() == source.read_bytes(), source.name
+    calls = effects.read_text()
+    assert "network-attempt" not in calls, calls
+    assert "application-preferred-widths" in calls and "portrait-minimum-tile-height" in calls
+    binding = "<Super>y" if len(arguments) > 1 else "<Super>t"
+    assert f"tile-focused-application-windows\t['{binding}']" in calls, calls
+    assert "Installed automatic-window-tiling@local." in result.stdout
+    print(None)
+
+
+@pytest.mark.parametrize("arguments,returncode", [
+    (["--standalone", "--help"], 0),
+    (["--standalone", "--select", "keybinding"], 2),
+    (["--standalone", "--unknown"], 2),
+    (["--standalone", "--binding"], 2),
+])
+def test_standalone_queries_and_errors_do_not_load_framework_or_mutate(installer_environment, arguments, returncode):
+    """Keep standalone help and invalid commands independent of the framework.
+
+    Parameters: installer_environment - isolated installer fixture; arguments - standalone CLI form; returncode - required exit status.
+    Returns: None.
+    """
+    print(f"installer_environment={installer_environment}, arguments={arguments}, returncode={returncode}")
+    _, home, effects, environment = installer_environment
+    shutil.rmtree(Path(environment["ISC_FUNCTIONS_DIR"]))
+    result = run_installer(installer_environment, arguments)
+    assert result.returncode == returncode, (arguments, result.stdout, result.stderr)
+    assert effects.read_text() == "", effects.read_text()
+    assert not (home / ".local/share/gnome-shell/extensions").exists()
+    print(None)
+
+
+@pytest.mark.parametrize("standalone", [False, True])
+def test_first_binding_write_failure_is_reported_and_stops_later_writes(installer_environment, standalone):
+    """Propagate a failed first shortcut write through both installation paths.
+
+    Parameters: installer_environment - isolated installer fixture; standalone - select the independent installer path.
+    Returns: None.
+    """
+    print(f"installer_environment={installer_environment}, standalone={standalone}")
+    _, _, effects, environment = installer_environment
+    environment["AWT_TEST_FAIL_KEY"] = "tile-focused-application-windows"
+    arguments = ["--standalone"] if standalone else ["--default"]
+    result = run_installer(installer_environment, arguments)
+    assert result.returncode != 0, result.stdout
+    assert "tile-focused-application-windows" in effects.read_text()
+    assert "tile-all-windows" not in effects.read_text(), effects.read_text()
+    assert "Installed automatic-window-tiling" not in result.stdout
     print(None)
