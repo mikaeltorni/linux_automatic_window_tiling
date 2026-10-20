@@ -23,8 +23,9 @@ extension source.
 ## Repository dependencies
 
 Use `bash install.sh --standalone` to install directly from this checkout.
-This path uses no shared framework, GitHub credentials, or network fetches.
-It needs the build and desktop tools listed below.
+This path does not fetch setup repositories or require GitHub credentials.
+It needs the build and desktop tools listed below; obtaining a toolchain or
+container image can require network access.
 
 The optional `installation_scripts` bundle clones and runs this installer
 as its own selectable repository; `linux_hotkey_setup` does not configure it.
