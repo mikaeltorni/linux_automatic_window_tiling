@@ -25,12 +25,14 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { calculateTileRect, chooseGrid, constrainGridToWindowSize, cycleTiledOrder, detectTiledOrder, minimumSizeAfterPlacement } from './layout.js';
 import {
+  captureWindowState,
   getFocusWindow,
   getTileGroupKey,
   getWindowApplicationId,
   isTileCandidate,
   placeWindowInTile,
   raiseWindow,
+  restoreWindowState,
 } from './windows.js';
 
 const TILE_KEY = 'tile-focused-application-windows';
@@ -178,9 +180,10 @@ function getApplicationPreferredWidth(applicationId, matchers) {
  *
  * Client minimum sizes can require a less dense grid. Cycling compares the
  * original frames against the final feasible grid before applying its order.
+ * An infeasible grid restores the original frames and window states.
  * Parameters: mode - log label; anchorWindow - window selecting workspace and monitor;
  * applicationId - application identity or null for all apps; background - preserve focus and order.
- * Returns: undefined after placement or an ignored request.
+ * Returns: undefined after placement, an ignored request or restoration of an infeasible layout.
  */
 function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, background = false) {
   console.log('tileWindowsOnMonitor parameters', { mode, anchorWindow, applicationId, background });
@@ -225,7 +228,8 @@ function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, backgrou
       `mode=${mode} applicationId=${applicationId ?? 'all'} tileGroup=${tileGroup} preferredWidth=${preferredWidth} windows=${windows.length} workArea=${workArea.width}x${workArea.height}`,
     );
     let grid = chooseGrid(windows.length, workArea, preferredWidth, portraitMinimumTileHeight);
-    const frames = windows.map(win => (typeof win.get_frame_rect === 'function' ? win.get_frame_rect() : null));
+    const states = windows.map(win => captureWindowState(win));
+    const frames = states.map(state => state.frame);
     let minimumSize = { width: 0, height: 0 };
     const attemptedGrids = new Set();
     while (!attemptedGrids.has(`${grid.rows}:${grid.columns}`)) {
@@ -247,8 +251,10 @@ function tileWindowsOnMonitor(mode, anchorWindow, applicationId = null, backgrou
 
       const nextGrid = constrainGridToWindowSize(windows.length, workArea, grid, minimumSize);
       if (!nextGrid) {
-        log.warn('client minimum sizes prevent all windows fitting in the work area');
-        break;
+        windows.forEach((win, index) => restoreWindowState(win, states[index]));
+        log.warn('client minimum sizes prevent all windows fitting in the work area; previous window layout restored');
+        console.log(undefined);
+        return;
       }
       grid = nextGrid;
     }

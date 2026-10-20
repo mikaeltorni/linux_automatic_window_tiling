@@ -125,6 +125,24 @@ def check_hotkey(key, window_ids):
     print(None)
 
 
+def check_rejected_hotkey(key, window_ids):
+    """Check that an infeasible real hotkey request preserves existing geometry.
+
+    Parameters: key - xdotool accelerator; window_ids - all selected windows in the current workspace.
+    Returns: None.
+    """
+    print(f"key={key}, window_ids={window_ids}")
+    require_windows(window_ids)
+    command("xdotool", "windowactivate", "--sync", str(window_ids[0]))
+    original = {window_id: read_frame(window_id) for window_id in window_ids}
+    for attempt in range(2):
+        command("xdotool", "key", "--clearmodifiers", key)
+        time.sleep(0.8)
+        actual = {window_id: read_frame(window_id) for window_id in window_ids}
+        assert actual == original, (attempt, original, actual)
+    print(None)
+
+
 def parse_arguments():
     """Parse the configured shortcut and the numeric X11 test windows.
 
@@ -135,20 +153,25 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--key", required=True)
     parser.add_argument("--windows", type=int, nargs="+", required=True)
+    parser.add_argument("--expect-unchanged", action="store_true",
+                        help="expect an infeasible grid to preserve existing window geometry")
     result = parser.parse_args()
     print(result)
     return result
 
 
 def main():
-    """Dispatch the VM regression through the configured public hotkey.
+    """Dispatch feasible or rejected VM checks through the configured public hotkey.
 
     Parameters: none.
     Returns: zero after all live geometry assertions pass.
     """
     print("parameters=none")
     arguments = parse_arguments()
-    check_hotkey(arguments.key, arguments.windows)
+    if arguments.expect_unchanged:
+        check_rejected_hotkey(arguments.key, arguments.windows)
+    else:
+        check_hotkey(arguments.key, arguments.windows)
     print(0)
     return 0
 
