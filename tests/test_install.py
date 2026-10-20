@@ -4,6 +4,8 @@ import subprocess
 
 import pytest
 
+from js_runtime import collect_modules, run_extension
+
 from pathlib import Path
 
 
@@ -54,48 +56,34 @@ def _run_javascript(source, body):
 
 
 def _run_window_helpers(function_names, body):
-    """Evaluate selected helpers with shared maximization adaptation and GNOME fakes.
+    """Evaluate the window module graph with named helpers and GNOME fakes.
 
     Parameters: function_names - requested window helpers; body - caller-provided JS invocation.
     Returns: the parsed JSON result.
     """
     print(f"function_names={function_names}, body={body}")
-    source = WINDOW_MODULE.read_text(encoding="utf-8")
-    functions = "\n".join(
-        _extract_function(source, function_name)
-        for function_name in dict.fromkeys([
-            "getWindowMaximizeFlags", "setWindowMaximizeFlags", *function_names,
-        ])
-    )
+    source = WINDOW_MODULE.read_text()
+    for name in function_names:
+        assert f"function {name}(" in source, name
+    functions = "\n".join(collect_modules(WINDOW_MODULE, set()))
     result = _run_javascript(functions, body)
     print(result)
     return result
 
 
 def _choose_grid(window_count, width, height, preferred_width):
-    """Run the extension's chooseGrid via node and return its result."""
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node is required to evaluate chooseGrid")
+    """Run the actual grid module with a landscape or portrait work area.
 
-    source = (ROOT / "layout.js").read_text(encoding="utf-8")
-    function_source = _extract_function(source, "chooseGrid")
-    script = f"""
-{function_source}
-const result = chooseGrid(
-    {window_count},
-    {{ x: 0, y: 0, width: {width}, height: {height} }},
-    {json.dumps(preferred_width)},
-);
-console.log(JSON.stringify(result));
-"""
-    completed = subprocess.run(
-        [node, "-e", script],
-        capture_output=True,
-        text=True,
-        check=True,
+    Parameters: window_count - window count; width - work-area width; height - work-area height; preferred_width - optional width preference.
+    Returns: the selected grid dimensions.
+    """
+    print(f"window_count={window_count}, width={width}, height={height}, preferred_width={preferred_width}")
+    result = _run_layout_module(
+        f"console.log(JSON.stringify(chooseGrid({window_count}, "
+        f"{{ x: 0, y: 0, width: {width}, height: {height} }}, {json.dumps(preferred_width)})));"
     )
-    return json.loads(completed.stdout.strip())
+    print(result)
+    return result
 
 
 def _calculate_tile_rect(index, rows, columns, width, height, x=0, y=0):
@@ -126,79 +114,78 @@ console.log(JSON.stringify(result));
 
 
 def test_extension_filters_by_application_workspace_and_monitor():
-    """Keep selection, layout and placement routed through their module owners.
+    """Keep lifecycle, preferences, geometry and platform operations in their owners.
 
     Parameters: none.
     Returns: None.
     """
     print("parameters=none")
-    source = (ROOT / "extension.js").read_text(encoding="utf-8")
-    layout_source = (ROOT / "layout.js").read_text(encoding="utf-8")
-    window_source = WINDOW_MODULE.read_text(encoding="utf-8")
-
-    assert "getWindowApplicationId" in source
-    assert "getTileGroupKey" in source
-    assert "getTileGroupKey" in window_source
-    assert "global.workspace_manager.get_active_workspace()" in source
-    assert "win.get_monitor() !== monitorIndex" in window_source
-    assert "workspace.get_work_area_for_monitor(monitorIndex)" in source
-    assert "placeWindowInTile(win, tile)" in source
-    assert "win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height)" in window_source
-    assert "getApplicationPreferredWidth" in source
-    assert "tileAllWindows" in source
-    assert "tile-all-windows" in source
-    assert "Main.wm.removeKeybinding(ALL_TILE_KEY)" in source
-    assert "from './layout.js'" in source
-    assert "from './windows.js'" in source
-    assert "parseApplicationPreferredWidths" in source
-    assert "'kitty:1300'" in source
-    assert "if (windowCount === 2)" in layout_source
-    assert "return { rows: 1, columns: 2 };" in layout_source
-    assert "workArea.width >= workArea.height" not in layout_source
-    # Kitty family co-tiling: provider-icon classes map to the shared group key.
-    assert "name.startsWith('kitty-')" in window_source
-    assert "return 'kitty'" in window_source
+    lifecycle = (ROOT / "extension.js").read_text()
+    tiling = (ROOT / "tiling.js").read_text()
+    preferences = (ROOT / "preferences.js").read_text()
+    layout = (ROOT / "layout.js").read_text()
+    windows = WINDOW_MODULE.read_text()
+    assert "new WindowTiler(this._settings)" in lifecycle
+    assert "this._tiler.tileAllWindows()" in lifecycle
+    assert "tile-all-windows" in lifecycle
+    assert "Main.wm.removeKeybinding(ALL_TILE_KEY)" in lifecycle
+    for call in ("getWindowApplicationId", "getTileGroupKey", "placeWindowInTile(win, tile)",
+                 "global.workspace_manager.get_active_workspace()", "workspace.get_work_area_for_monitor(monitorIndex)"):
+        assert call in tiling, call
+    assert "win.get_monitor() !== monitorIndex" in windows
+    assert "win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height)" in windows
+    assert "readTilingPreferences(this._settings)" in tiling
+    assert "'kitty:1300'" in preferences
+    assert "if (windowCount === 2)" in layout
+    assert "const result = { rows: 1, columns: 2 };" in layout
+    assert "name.startsWith('kitty-')" in windows
+    assert "return 'kitty'" in windows
     print(None)
 
 
 def test_background_group_tiling_uses_anchor_workspace_without_focus_change():
-    source = (ROOT / "extension.js").read_text(encoding="utf-8")
-    assert 'name="TileWindowGroup"' in source
-    assert 'name="TileWindowGroups"' in source
-    assert 'type="as" name="windowIds"' in source
-    assert "workspace.index()" in source
-    assert "anchor.get_monitor()" in source
-    assert "anchors.set(key, [anchor, applicationId])" in source
-    assert "anchorWindow.get_workspace()" in source
-    assert "anchorWindow.get_monitor()" in source
-    assert "getTileGroupKey(applicationId)" in source
-    assert "background ? null : detectTiledOrder" in source
-    assert "if (!background) {\n      raiseWindow(anchorWindow, workspace);" in source
-    assert "this._dbusObject.unexport()" in source
+    """Keep background window routing and focus rules separate from lifecycle registration.
+
+    Parameters: none.
+    Returns: None.
+    """
+    print("parameters=none")
+    lifecycle = (ROOT / "extension.js").read_text()
+    source = (ROOT / "tiling.js").read_text()
+    assert 'name="TileWindowGroup"' in lifecycle
+    assert 'name="TileWindowGroups"' in lifecycle
+    for call in ("workspace.index()", "anchor.get_monitor()", "anchors.set(key, [anchor, applicationId])",
+                 "anchorWindow.get_workspace()", "background ? null : detectTiledOrder", "if (!background)"):
+        assert call in source, call
+    assert "this._dbusObject.unexport()" in lifecycle
+    print(None)
 
 
 def test_background_batch_groups_actual_workspaces_and_monitors_once():
-    source = (ROOT / "extension.js").read_text(encoding="utf-8")
-    result = _run_javascript(
-        _extract_function(source, "tileWindowGroups"),
-        """
+    """Group parsed background identifiers once for every actual workspace and monitor.
+
+    Parameters: none.
+    Returns: None.
+    """
+    print("parameters=none")
+    result = run_extension("const Extension = class {};", """
 const windows = [
   [10, 0, 0], [11, 0, 0], [12, 0, 1], [13, 1, 0],
 ].map(([id, workspace, monitor]) => ({
   get_description: () => `0x${id.toString(16)}`,
+  get_wm_class: () => 'kitty',
   get_workspace: () => ({ index: () => workspace }),
   get_monitor: () => monitor,
 }));
 global.get_window_actors = () => windows.map(win => ({ get_meta_window: () => win }));
-function getWindowApplicationId() { return 'wm-class:kitty'; }
-function getTileGroupKey() { return 'kitty'; }
 const tiled = [];
-function tileWindowsOnMonitor(_mode, anchor) { tiled.push(Number(anchor.get_description())); }
-tileWindowGroups(['10', '0xb', '12', '13']);
+const tiler = new WindowTiler(null);
+tiler.tileWindowsOnMonitor = (_mode, anchor) => tiled.push(Number(anchor.get_description()));
+tiler.tileWindowGroups(['10', '0xb', '12', '13']);
 console.log(JSON.stringify(tiled));
-""",
-    )
+""")
     assert result == [11, 12, 13]
+    print(None)
 
 
 def test_get_focus_window_rejects_missing_and_taskbar_skipping_windows():
@@ -567,32 +554,35 @@ def test_all_window_binding_is_applied_with_the_existing_binding_component():
 
 
 def test_parse_application_preferred_widths_skips_malformed_entries():
-    source = (ROOT / "extension.js").read_text(encoding="utf-8")
-    function_source = _extract_function(source, "parseApplicationPreferredWidths")
-    result = _run_javascript(
-        function_source,
-        """
-console.log(JSON.stringify(parseApplicationPreferredWidths([
-  'kitty:1300',
-  'firefox:900',
-  'nocolon',
-  'zero:0',
-  'negative:-5',
-  'bad:width',
-])));
-""",
-    )
+    """Preserve effective width preferences when malformed entries are rejected by the operation.
 
+    Parameters: none.
+    Returns: None.
+    """
+    print("parameters=none")
+    result = run_extension("const Extension = class {};", """
+const settings = {
+  get_strv: () => ['kitty:1300', 'firefox:900', 'nocolon', 'zero:0', 'negative:-5', 'bad:width'],
+  get_int: () => 0,
+};
+console.log(JSON.stringify(readTilingPreferences(settings).widthMatchers));
+""")
     assert result == [
         {"match": "kitty", "preferredWidth": 1300},
         {"match": "firefox", "preferredWidth": 900},
     ]
+    print(None)
 
 
 def test_get_application_preferred_width_matches_identifier_suffix():
-    """Preferred-width lookup uses the shared tile-group key (kitty family)."""
+    """Use the shared kitty group for effective width lookup.
+
+    Parameters: none.
+    Returns: None.
+    """
+    print("parameters=none")
     window_source = WINDOW_MODULE.read_text(encoding="utf-8")
-    extension_source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    extension_source = (ROOT / "preferences.js").read_text(encoding="utf-8")
     functions = "\n".join(
         [
             _extract_function(window_source, "getTileGroupKey"),
@@ -622,37 +612,22 @@ console.log(JSON.stringify({
         "other": None,
         "nonString": None,
     }
+    print(None)
 
 
 def _choose_grid_portrait(window_count, width, height, portrait_min_height):
-    """Run chooseGrid on a portrait work area with an explicit minimum tile height.
+    """Read portrait wrapping from the actual grid module.
 
-    ``None`` is serialized as the JS ``null`` literal; a non-positive height is
-    passed through to mean "no minimum" so the windows stack in one column.
+    Parameters: window_count - window count; width - work-area width; height - work-area height; portrait_min_height - optional wrapping height.
+    Returns: the selected grid dimensions.
     """
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node is required to evaluate chooseGrid")
-
-    height_arg = "null" if portrait_min_height is None else str(portrait_min_height)
-    source = (ROOT / "layout.js").read_text(encoding="utf-8")
-    function_source = _extract_function(source, "chooseGrid")
-    script = f"""
-{function_source}
-console.log(JSON.stringify(chooseGrid(
-    {window_count},
-    {{ x: 0, y: 0, width: {width}, height: {height} }},
-    null,
-    {height_arg},
-)));
-"""
-    completed = subprocess.run(
-        [node, "-e", script],
-        capture_output=True,
-        text=True,
-        check=True,
+    print(f"window_count={window_count}, width={width}, height={height}, portrait_min_height={portrait_min_height}")
+    result = _run_layout_module(
+        f"console.log(JSON.stringify(chooseGrid({window_count}, "
+        f"{{ x: 0, y: 0, width: {width}, height: {height} }}, null, {json.dumps(portrait_min_height)})));"
     )
-    return json.loads(completed.stdout.strip())
+    print(result)
+    return result
 
 
 def test_portrait_minimum_height_is_configurable():
@@ -924,12 +899,16 @@ def test_repeated_cycles_return_to_the_original_order():
 
 
 def test_extension_cycles_order_when_windows_are_already_tiled():
-    source = (ROOT / "extension.js").read_text(encoding="utf-8")
+    """Keep the tiling operation responsible for matching and rotating existing cells.
 
-    assert "detectTiledOrder" in source
-    assert "cycleTiledOrder" in source
-    assert "const ordered = tiledOrder" in source
-    assert "const win = ordered[index];" in source
+    Parameters: none.
+    Returns: None.
+    """
+    print("parameters=none")
+    source = (ROOT / "tiling.js").read_text()
+    for call in ("detectTiledOrder", "cycleTiledOrder", "const ordered = tiledOrder", "const win = ordered[index];"):
+        assert call in source, call
+    print(None)
 
 
 @pytest.mark.parametrize("anchor_maximized,peer_maximized", [(3, 0), (0, 3), (3, 3), (1, 2), (0, 0)])
@@ -942,29 +921,20 @@ def test_super_t_tiles_maximized_windows_and_preserves_selection_and_cycling(
     Returns: None.
     """
     print(f"anchor_maximized={anchor_maximized}, peer_maximized={peer_maximized}")
-    window_source = WINDOW_MODULE.read_text(encoding="utf-8")
-    extension_source = (ROOT / "extension.js").read_text(encoding="utf-8")
-    functions = "\n".join(
-        [_extract_function(window_source, name) for name in [
-            "getWindowMaximizeFlags", "setWindowMaximizeFlags",
-            "getFocusWindow", "canTileWindow", "getWindowApplicationId",
-            "getTileGroupKey", "isTileCandidate", "prepareWindow", "placeWindowInTile",
-            "captureWindowState", "restoreWindowState", "raiseWindow",
-        ]]
-        + [_extract_function(extension_source, name) for name in [
-            "parseApplicationPreferredWidths", "getApplicationPreferredWidth",
-            "tileWindowsOnMonitor", "tileFocusedApplicationWindows",
-        ]]
-    )
-    layout = (ROOT / "layout.js").read_text().replace("export function", "function")
-    result = _run_javascript(
-        functions + "\n" + layout,
-        """
-const Meta = { WindowType: { NORMAL: 1 } };
-const Shell = { WindowTracker: { get_default: () => ({ get_window_app: () => null }) } };
-const log = { info() {}, error(message) { throw new Error(message); } };
-const extensionSettings = null;
-const DEFAULT_APPLICATION_PREFERRED_WIDTHS = ['kitty:1300'];
+    result = run_extension("const Extension = class {};", """
+const Meta = { WindowType: { NORMAL: 1 }, KeyBindingFlags: { NONE: 0 } };
+const Shell = { ActionMode: { NORMAL: 1 }, WindowTracker: { get_default: () => ({ get_window_app: () => null }) } };
+const handlers = new Map();
+const Main = { wm: {
+  addKeybinding: (key, settings, flags, modes, handler) => handlers.set(key, handler),
+  removeKeybinding: key => handlers.delete(key),
+} };
+const Gio = {
+  DBusExportedObject: { wrapJSObject: () => ({ export: () => {}, unexport: () => {} }) },
+  DBus: { session: {} }, BusNameOwnerFlags: { NONE: 0 },
+  bus_own_name_on_connection: () => 1, bus_unown_name: () => {},
+};
+Extension.prototype.getSettings = () => null;
 const workArea = { x: 0, y: 24, width: 2000, height: 1000 };
 const calls = [];
 const workspace = {
@@ -1015,11 +985,14 @@ const excluded = [
 const windows = [peer, anchor, ...excluded];
 global.display = { focus_window: anchor };
 global.workspace_manager = { get_active_workspace: () => workspace };
-tileFocusedApplicationWindows();
+const extension = new AutomaticWindowTilingExtension();
+extension.enable();
+handlers.get("tile-focused-application-windows")();
 const first = [anchor.frame, peer.frame];
 const firstCalls = calls.slice();
 calls.length = 0;
-tileFocusedApplicationWindows();
+handlers.get("tile-focused-application-windows")();
+extension.disable();
 console.log(JSON.stringify({
   first,
   firstCalls,
