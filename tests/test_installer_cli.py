@@ -51,6 +51,10 @@ esac
     build = checkout / "scripts/build_awt_tools.sh"
     build.write_text('''#!/bin/bash
 if [[ "${AWT_TEST_FAIL_BUILD:-0}" == 1 ]]; then exit 1; fi
+if [[ "${AWT_TEST_EXPECT_USER_BUILD:-0}" == 1 && "$HOME" != "$AWT_TEST_HOME" ]]; then
+  printf 'build must use desktop user home\n' >&2
+  exit 1
+fi
 printf '%s\n' "$AWT_TEST_HELPER"
 ''')
     build.chmod(0o755)
@@ -303,4 +307,36 @@ def test_first_binding_write_failure_is_reported_and_stops_later_writes(installe
     assert "tile-focused-application-windows" in effects.read_text()
     assert "tile-all-windows" not in effects.read_text(), effects.read_text()
     assert "Installed automatic-window-tiling" not in result.stdout
+    print(None)
+
+
+@pytest.mark.parametrize("standalone", [False, True])
+def test_sudo_install_builds_with_desktop_user_home(installer_environment, standalone):
+    """Use the target user's build environment without depending on root Rust.
+
+    Parameters: installer_environment - isolated installer fixture; standalone - choose standalone or framework dispatch.
+    Returns: None.
+    """
+    print(f"installer_environment={installer_environment}, standalone={standalone}")
+    _, home, _, environment = installer_environment
+    commands = home.parent / "bin"
+    (commands / "id").write_text('''#!/bin/bash
+if [[ "${2:-}" == desktop ]]; then printf '1000\n'; else printf '0\n'; fi
+''')
+    (commands / "sudo").write_text('''#!/bin/bash
+[[ "$1" == -H && "$2" == -u && "$3" == desktop ]] || exit 99
+shift 3
+exec "$@"
+''')
+    (commands / "chown").write_text('#!/bin/bash\nexit 0\n')
+    for name in ("id", "sudo", "chown"):
+        (commands / name).chmod(0o755)
+    root_home = home.parent / "root-home"
+    root_home.mkdir()
+    environment.update({"HOME": str(root_home), "SUDO_USER": "desktop", "AWT_TEST_EXPECT_USER_BUILD": "1"})
+    arguments = ["--standalone"] if standalone else ["--default"]
+    result = run_installer(installer_environment, arguments)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert (home / ".local/share/gnome-shell/extensions/automatic-window-tiling@local/extension.js").exists()
+    assert not (root_home / ".local/share/gnome-shell/extensions").exists()
     print(None)
