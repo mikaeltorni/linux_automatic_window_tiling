@@ -134,6 +134,10 @@ function gridFitsWindowSize(grid, windowCount, workArea, minimumSize) {
  */
 export function constrainGridToWindowSize(windowCount, workArea, grid, minimumSize) {
   console.log('constrainGridToWindowSize parameters', { windowCount, workArea, grid, minimumSize });
+  if (gridFitsWindowSize(grid, windowCount, workArea, minimumSize)) {
+    console.log(grid);
+    return grid;
+  }
   const maxColumns = minimumSize.width > 0
     ? Math.max(1, Math.floor(workArea.width / minimumSize.width)) : windowCount;
   const maxRows = minimumSize.height > 0
