@@ -68,7 +68,12 @@ parse_binding() {
           return 2
         fi
         AWT_ALL_BINDING="${1#*=}"; AWT_ALL_BINDING_EXPLICIT=1; shift ;;
-      --select)
+      --select|--reconfigure|--uninstall|--config|--configure-component)
+        if [[ $# -lt 2 || "${2:-}" == -* ]]; then
+          usage >&2
+          printf 'parse_binding return=2\n' >&2
+          return 2
+        fi
         FRAMEWORK_ARGS+=("$1" "${2:-}"); shift 2 ;;
       --)
         shift ;;
@@ -164,13 +169,17 @@ load_component_framework() {
   isc_activate_components
 }
 
-# Parse installer options, resolve the target user, deploy the extension, and
-# route selected components through the shared framework.
-# Parameters: "$@" - raw installer arguments. Returns: 0 after installation;
-# 1 for environment errors; 2 for invalid binding options.
+# Parse once and delegate selection, queries and core installation to the framework.
+# Parameters: "$@" - raw installer arguments. Returns: 0 after a successful
+# installation or framework action; nonzero for parser, environment or framework errors.
 main() {
   printf 'main parameters=%s\n' "$*" >&2
-  parse_binding "$@" || return $?
+  local result
+  parse_binding "$@" || {
+    result=$?
+    printf 'main return=%s\n' "$result" >&2
+    return "$result"
+  }
 
   # A delegated invocation (linux_hotkey_setup) passes only the tiling binding
   # and no component selection. With no selection flag, component_main drops into
@@ -184,42 +193,31 @@ main() {
     FRAMEWORK_ARGS=(--default)
   fi
 
-  resolve_target || return 1
+  resolve_target || { printf 'main return=1\n' >&2; return 1; }
 
-  # Load the shared framework first, then our install steps, so this
-  # repository's self-contained run_as_target/gsettings_array win over the
-  # shared helpers' implementations regardless of source order.
+  # The framework invokes ISC_CORE only for installation. Queries, invalid
+  # commands and uninstall must never deploy or enable the extension first.
   load_component_framework
   # shellcheck source=lib/awt_bin.sh
   source "$SCRIPT_DIR/lib/awt_bin.sh"
   # shellcheck source=lib/tiling_setup.sh
   source "$SCRIPT_DIR/lib/tiling_setup.sh"
-  awt_install_core || return 1
-
   # shellcheck source=installer/components.sh
   source "$SCRIPT_DIR/installer/components.sh"
-  component_main "${FRAMEWORK_ARGS[@]}"
+  if component_main "${FRAMEWORK_ARGS[@]}"; then
+    result=0
+  else
+    result=$?
+    printf 'main return=%s\n' "$result" >&2
+    return "$result"
+  fi
 
-  printf 'Installed %s.\n' "$EXTENSION_ID"
-  printf 'Log out and back in if GNOME Shell has not loaded the extension.\n'
+  if [[ "${AWT_CORE_INSTALLED:-0}" == 1 ]]; then
+    printf 'Installed %s.\n' "$EXTENSION_ID"
+    printf 'Log out and back in if GNOME Shell has not loaded the extension.\n'
+  fi
   printf 'main return=0\n' >&2
+  return 0
 }
-
-# Listing/help must print only their own output (the master installer parses
-# --list-components); skip the core deploy and completion message for those.
-case "${1:-}" in
-  --list-components|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*)
-    load_component_framework
-    source "$SCRIPT_DIR/lib/awt_bin.sh"
-    source "$SCRIPT_DIR/lib/tiling_setup.sh"
-    source "$SCRIPT_DIR/installer/components.sh"
-    # --detect/--uninstall reach into the target user's gsettings via
-    # run_as_target, so resolve the session globals first (best-effort; harmless
-    # for the pure --list-components/--help output).
-    resolve_target || true
-    component_main "$@"
-    exit $?
-    ;;
-esac
 
 main "$@"

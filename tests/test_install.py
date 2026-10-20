@@ -659,6 +659,12 @@ def test_portrait_minimum_height_is_configurable():
 
 
 def test_installer_parses_binding_and_routes_through_component_framework():
+    """Keep installer parsing and core execution delegated to their owning layers.
+
+    Parameters: none.
+    Returns: None.
+    """
+    print("parameters=none")
     installer = (ROOT / "install.sh").read_text(encoding="utf-8")
 
     assert 'parse_binding "$@"' in installer
@@ -666,13 +672,14 @@ def test_installer_parses_binding_and_routes_through_component_framework():
     assert "installer_log" in installer
     assert "--binding" in installer
     assert 'TARGET_USER="${SUDO_USER:-${TARGET_USER:-$USER}}"' in installer
-    # The core deploy always runs; customizable behavior is routed through the
-    # shared component framework.
+    # Core deployment belongs to the framework's install-only hook.
     assert 'source "$SCRIPT_DIR/lib/tiling_setup.sh"' in installer
-    assert "awt_install_core" in installer
+    manifest = (ROOT / "installer/components.sh").read_text(encoding="utf-8")
+    assert "ISC_CORE=awt_install_core" in manifest
     assert "isc_activate_components" in installer
     assert 'source "$SCRIPT_DIR/installer/components.sh"' in installer
     assert 'component_main "${FRAMEWORK_ARGS[@]}"' in installer
+    print(None)
 
 
 def test_bare_binding_runs_default_components_non_interactively():
