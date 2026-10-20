@@ -32,7 +32,12 @@ def _extract_function(source, function_name):
 
 
 def _run_javascript(source, body):
-    """Evaluate JavaScript source plus a test body and return parsed JSON."""
+    """Evaluate JavaScript and parse the final result after diagnostic prints.
+
+    Parameters: source - runtime functions; body - public invocation and final JSON output.
+    Returns: the independently asserted JSON result.
+    """
+    print(f"source={source}, body={body}")
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is required to evaluate JavaScript helpers")
@@ -43,7 +48,9 @@ def _run_javascript(source, body):
         text=True,
         check=True,
     )
-    return json.loads(completed.stdout.strip())
+    result = json.loads(completed.stdout.strip().splitlines()[-1])
+    print(result)
+    return result
 
 
 def _run_window_helpers(function_names, body):
@@ -110,6 +117,12 @@ console.log(JSON.stringify(result));
 
 
 def test_extension_filters_by_application_workspace_and_monitor():
+    """Keep selection, layout and placement routed through their module owners.
+
+    Parameters: none.
+    Returns: None.
+    """
+    print("parameters=none")
     source = (ROOT / "extension.js").read_text(encoding="utf-8")
     layout_source = (ROOT / "layout.js").read_text(encoding="utf-8")
     window_source = WINDOW_MODULE.read_text(encoding="utf-8")
@@ -120,7 +133,8 @@ def test_extension_filters_by_application_workspace_and_monitor():
     assert "global.workspace_manager.get_active_workspace()" in source
     assert "win.get_monitor() !== monitorIndex" in window_source
     assert "workspace.get_work_area_for_monitor(monitorIndex)" in source
-    assert "win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height)" in source
+    assert "placeWindowInTile(win, tile)" in source
+    assert "win.move_resize_frame(true, tile.x, tile.y, tile.width, tile.height)" in window_source
     assert "getApplicationPreferredWidth" in source
     assert "tileAllWindows" in source
     assert "tile-all-windows" in source
@@ -135,6 +149,7 @@ def test_extension_filters_by_application_workspace_and_monitor():
     # Kitty family co-tiling: provider-icon classes map to the shared group key.
     assert "name.startsWith('kitty-')" in window_source
     assert "return 'kitty'" in window_source
+    print(None)
 
 
 def test_background_group_tiling_uses_anchor_workspace_without_focus_change():
@@ -905,13 +920,18 @@ def test_extension_cycles_order_when_windows_are_already_tiled():
 def test_super_t_tiles_maximized_windows_and_preserves_selection_and_cycling(
     anchor_maximized, peer_maximized,
 ):
-    """Invoke the hotkey handler with realistic state-dependent resize checks."""
+    """Invoke the hotkey handler with realistic state-dependent resize checks.
+
+    Parameters: anchor_maximized - focused window maximize flags; peer_maximized - matching peer flags.
+    Returns: None.
+    """
+    print(f"anchor_maximized={anchor_maximized}, peer_maximized={peer_maximized}")
     window_source = WINDOW_MODULE.read_text(encoding="utf-8")
     extension_source = (ROOT / "extension.js").read_text(encoding="utf-8")
     functions = "\n".join(
         [_extract_function(window_source, name) for name in [
             "getFocusWindow", "canTileWindow", "getWindowApplicationId",
-            "getTileGroupKey", "isTileCandidate", "prepareWindow", "raiseWindow",
+            "getTileGroupKey", "isTileCandidate", "prepareWindow", "placeWindowInTile", "raiseWindow",
         ]]
         + [_extract_function(extension_source, name) for name in [
             "parseApplicationPreferredWidths", "getApplicationPreferredWidth",
@@ -1005,3 +1025,4 @@ console.log(JSON.stringify({
     assert result["secondCalls"] == [["tile", 1], ["tile", 2], ["raise", 2]]
     assert result["states"] == [0, 0]
     assert result["excludedStates"] == [3] * 7
+    print(None)
