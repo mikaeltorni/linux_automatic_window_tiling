@@ -12,3 +12,7 @@ dist/
 .cursor/skills/programming-prompts/
 .cursor/rules/programming-prompts-always-on.mdc
 # END programming-prompts-cursor
+.installer-support/__pycache__/
+.installer-support/.log/
+.installer-support/target/
+.installer-support/dist/
