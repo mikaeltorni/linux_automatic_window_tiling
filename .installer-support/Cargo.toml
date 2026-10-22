@@ -1,0 +1,29 @@
+[package]
+name = "repeatable-fields"
+version = "0.1.0"
+edition = "2021"
+description = "One-based repeatable installer row state"
+publish = false
+
+[[bin]]
+name = "repeatable-fields"
+path = "src/main.rs"
+
+[[bin]]
+name = "installation-config"
+path = "src/bin/installation-config.rs"
+
+[[bin]]
+name = "monitor-layout"
+path = "src/bin/monitor-layout.rs"
+
+[[bin]]
+name = "tmux-background-output"
+path = "src/bin/tmux-background-output.rs"
+
+[[bin]]
+name = "hotkey-capture"
+path = "src/bin/hotkey-capture.rs"
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
