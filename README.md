@@ -1,3 +1,5 @@
+> Part of [mt_stack](https://github.com/mikaeltorni/mt_stack), a Linux setup stack of independently installable projects.
+
 # Linux Automatic Window Tiling for GNOME Shell
 
 [![Last commit: 2026-10-20](docs/badges/last-commit.svg)](https://github.com/mikaeltorni/linux_automatic_window_tiling/commits/master)
