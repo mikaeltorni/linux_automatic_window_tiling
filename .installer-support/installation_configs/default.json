@@ -1,0 +1,34 @@
+{
+  "components": {
+    "installer_helpers": {
+      "config_value": "",
+      "favorite": 0,
+      "on": 1,
+      "startup": 0,
+      "sticky": 0,
+      "uninstall": 0,
+      "workspace": 0
+    },
+    "menu": {
+      "config_value": "",
+      "favorite": 0,
+      "on": 1,
+      "startup": 0,
+      "sticky": 0,
+      "uninstall": 0,
+      "workspace": 0
+    },
+    "runtime": {
+      "config_value": "",
+      "favorite": 0,
+      "on": 1,
+      "startup": 0,
+      "sticky": 0,
+      "uninstall": 0,
+      "workspace": 0
+    }
+  },
+  "repo": "linux_installation_scripts_functions",
+  "schema_version": 1,
+  "scope": "standalone"
+}
