@@ -216,20 +216,28 @@ isc_config_apply_state_file() {
   return 0
 }
 
-# isc_config_export_json - export current CM_* state to a JSON file.
-# Arguments: $1 scope (master|standalone); $2 repo (standalone only); $3 output json path.
+# Export current component state to a path or the existing stdout stream.
+# Parameters: scope - master or standalone; repo - standalone repository name; out - JSON path or /dev/stdout.
+# Returns: the export status, or one if temporary-state creation fails.
 isc_config_export_json() {
-  local scope="$1" repo="${2:-}" out="$3" state
-  state="$(mktemp)" || return 1
+  printf 'scope=%s, repo=%s, out=%s\n' "$1" "${2:-}" "$3" >&2
+  local scope="$1" repo="${2:-}" out="$3" state rc=0
+  local -a output_args=()
+  state="$(mktemp)" || { printf '1\n' >&2; return 1; }
   if [[ "$scope" == "master" ]]; then
     isc_config_serialize_master "$state"
   else
     isc_config_serialize_standalone "$repo" "$state"
   fi
-  isc_config_python export --state-file "$state" --output "$out"
-  local rc=$?
+  # Reopening /dev/stdout truncates a regular file shared with the caller.
+  # Omitting --output makes both config backends write the existing stream.
+  if [[ "$out" != /dev/stdout ]]; then
+    output_args=(--output "$out")
+  fi
+  isc_config_python export --state-file "$state" "${output_args[@]}" || rc=$?
   rm -f "$state"
-  return $rc
+  printf '%s\n' "$rc" >&2
+  return "$rc"
 }
 
 # isc_config_is_explicit_empty - return 0 when the JSON document means "no selection".
