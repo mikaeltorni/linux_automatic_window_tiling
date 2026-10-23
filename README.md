@@ -414,10 +414,15 @@ The existing component interface and options documented above remain available;
 `ISC_FUNCTIONS_DIR` is an explicit support override. Run
 `python3 tests/check_standalone_public.py` to check discovery and selection JSON
 with downloads blocked. Runtime extension source is unchanged by this installer
-support migration. These owner fixes are committed locally and must be explicitly
-published before a fresh public clone can use them.
+support migration. The standalone support is available on the public default branch. Follow-up
+fixes from the final local audit remain local until explicitly published.
 
 ## Ubuntu VM installer verification
+
+The follow-up local suite passes 102 Python tests. Its installer fixture preserves
+symlinks, including dangling editor-skill links, so unrelated editor integrations
+do not prevent isolated public installer checks. The original VM is no longer
+available; this fixture change was verified locally through `bash tests/run_tests.sh`.
 
 VM verification on Ubuntu 24.04.5 / GNOME 46 X11 covered repeated standalone
 and hub installation, component-menu apply/cancel, and both shortcuts arranging
