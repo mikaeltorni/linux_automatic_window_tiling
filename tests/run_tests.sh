@@ -27,6 +27,8 @@ bash scripts/build_awt_tools.sh --print >/dev/null
 printf '%s\n' 'Running Python tests'
 python3 -m pytest tests -q
 
+python3 tests/check_invalid_selection.py
+
 printf '%s\n' 'Checking installer shell syntax'
 bash -n install.sh lib/*.sh installer/*.sh scripts/*.sh tests/run_tests.sh
 
