@@ -416,3 +416,16 @@ The existing component interface and options documented above remain available;
 with downloads blocked. Runtime extension source is unchanged by this installer
 support migration. These owner fixes are committed locally and must be explicitly
 published before a fresh public clone can use them.
+
+## Ubuntu VM installer verification
+
+VM verification on Ubuntu 24.04.5 / GNOME 46 X11 covered repeated standalone
+and hub installation, component-menu apply/cancel, and both shortcuts arranging
+and cycling three real terminal windows. Unknown component selections are rejected
+before deployment; JSON export preserves earlier redirected output.
+
+```bash
+python3 tests/check_invalid_selection.py
+python3 tests/check_export_stream.py
+bash tests/run_tests.sh
+```
