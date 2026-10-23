@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,14 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def installer_environment(tmp_path):
-    """Prepare a clean checkout and fake desktop commands without host effects.
+    """Preserve checkout links and fake desktop commands without host effects.
 
     Parameters: tmp_path - pytest's isolated temporary directory.
     Returns: the checkout, target home, effects log and subprocess environment.
     """
     print(f"tmp_path={tmp_path}")
     checkout = tmp_path / "checkout"
-    shutil.copytree(ROOT, checkout, ignore=shutil.ignore_patterns(
+    shutil.copytree(ROOT, checkout, symlinks=True, ignore=shutil.ignore_patterns(
         ".git", "tmp", "target", "dist", ".log", ".pytest_cache", "__pycache__",
     ))
     home = tmp_path / "desktop"
@@ -136,6 +137,30 @@ def run_installer(sandbox, arguments):
                             env=environment, text=True, capture_output=True, timeout=15)
     print(result)
     return result
+
+
+def test_checkout_with_dangling_editor_skill_link(tmp_path, monkeypatch, request):
+    """Exercise public installer discovery with unrelated dangling editor links.
+
+    Parameters: tmp_path - isolated test directory; monkeypatch - scoped root replacement; request - fixture request.
+    Returns: None.
+    """
+    print(f"tmp_path={tmp_path}, monkeypatch={monkeypatch}, request={request}")
+    source = tmp_path / "source"
+    shutil.copytree(ROOT, source, symlinks=True, ignore=shutil.ignore_patterns(
+        ".git", "tmp", "target", "dist", ".log", ".pytest_cache", "__pycache__",
+    ))
+    link = source / ".cursor/skills/missing-test-skill"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(tmp_path / "uninstalled-skill-source")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", source)
+    sandbox = request.getfixturevalue("installer_environment")
+    result = run_installer(sandbox, ["--list-components"])
+    assert result.returncode == 0, result.stderr
+    assert "keybinding\t" in result.stdout, result.stdout
+    assert (sandbox[0] / ".cursor/skills/missing-test-skill").is_symlink()
+    assert sandbox[2].read_text() == ""
+    print(None)
 
 
 @pytest.mark.parametrize("arguments", [
