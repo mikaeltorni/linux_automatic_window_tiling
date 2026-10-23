@@ -434,12 +434,32 @@ _isc_requirements_satisfied() {
 # Returns:
 #   0 when all selected components succeeded; 1 when one or more failed;
 #   2 when ISC_CORE failed (components are not attempted on a broken core).
+# Accept only declared component identities before applying any installation effects.
+# Parameters: selected - normalized whitespace-separated component identities.
+# Returns: zero when every named component exists, one otherwise.
+_isc_require_selected_ids() {
+  printf 'selected=%s\n' "$1" >&2
+  local selected="$1" id
+  for id in $selected; do
+    if [[ -z "$(_isc_field "$id" 0)" ]]; then
+      printf 'Unknown component: %s\n1\n' "$id" >&2
+      return 1
+    fi
+  done
+  printf '0\n' >&2
+  return 0
+}
+
+# Parameters: selected_ids - requested component IDs; strictness - strict or derived selection origin.
+# Returns: zero after successful application, one on validation/component failure, two on core failure.
 _isc_run_selected() {
+  printf 'selected_ids=%s, strictness=%s\n' "$1" "${2:-derived}" >&2
   local selected=" $(tr ',\n' '  ' <<<"$1") "
   local strictness="${2:-derived}"
   local completed=" "
   local entry id label def fn detect uninstall section requires requirement ran=0
   local -a failed=()
+  _isc_require_selected_ids "$selected" || { printf '1\n' >&2; return 1; }
   isc_log_info "run_selected requested ids:${selected}"
   # Install the repository core before anything else, regardless of selection.
   if [[ -n "${ISC_CORE:-}" ]] && declare -F "$ISC_CORE" >/dev/null 2>&1; then
@@ -447,6 +467,7 @@ _isc_run_selected() {
     if ! "$ISC_CORE"; then
       isc_log_error "core install '$ISC_CORE' failed — not installing components"
       msg "ERROR: [$ISC_REPO_NAME] core install '$ISC_CORE' failed — aborting" >&2
+      printf '2\n' >&2
       return 2
     fi
   elif [[ -n "${ISC_CORE:-}" ]]; then
@@ -523,9 +544,11 @@ _isc_run_selected() {
   if (( ${#failed[@]} > 0 )); then
     isc_log_error "components with failures: ${failed[*]}"
     msg "[$ISC_REPO_NAME] Components with failures: ${failed[*]}"
+    printf '1\n' >&2
     return 1
   fi
   isc_log_info "run_selected completed successfully ($ran component(s))"
+  printf '0\n' >&2
   return 0
 }
 
