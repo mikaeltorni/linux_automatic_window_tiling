@@ -1,0 +1,25 @@
+{
+  "files": {
+    "LICENSE.md": "9b4a372f8ce987e6990ba3b57b60fea14e75cbdfa8ef704503442ac75aa24586",
+    "bootstrap.sh": "6258e6fadeae8cb9bfd0323ce5aa72af35099de716d6405032697870f76339df",
+    "component_loader.sh": "0d21957938ec3ddfe487d7bea95c0227bf0fc7a6774b708041f82f75b1848fff",
+    "component_logging.sh": "ef28e47e899832537ea23ba31c36e1b30d8e48f4609691c7592d7a80cfab6d41",
+    "component_menu.sh": "5e6958b9f1e42a56097c0460109849342e619ade3e352d27e966648e10b1257e",
+    "component_runtime.sh": "e702f8a112520750c4e60980a8956f2f07820c9fdb656261d4b52cc49087ead9",
+    "hotkey_capture.py": "37017cc6433410718e921cb2b9eb550220857cc6b79c305dde246a09c67e2adb",
+    "hotkey_capture.sh": "bd8e301eb2557e0f910d5e5037dcb95df0947c00ebf795b3e69fdf5f7fe56ef4",
+    "installation_config.py": "d1ad54e02b5182d7fc57166579573a54e0852f624f338501339ee2c0780a9f2c",
+    "installation_config.sh": "b6095a5a71200af620a0ed5ec882e637d3b71725f079b715299bed0d10c58352",
+    "installer_helpers.sh": "70e0333944d816dbfcde1fbbf5c76348c7ee04d69c433548e6a4c4a0d66e277b",
+    "logging_utils.py": "cce8f15f8633e1abdb63f642bb96bdcf14fb3f2cdad53e2bbcd23d0193edc2d7",
+    "monitor_layout.py": "6432a49430ae0257f4bd1ae8420a9f945235a3092ea6374fdc14f14226a07f1f",
+    "monitor_layout.sh": "04f1f8317c07fccf8ccb61fbe56f878a3827aa2a6cca3fea32988d5f48e9d217",
+    "repeatable_fields.py": "6b0a0c61a2673aafb5ffd05041b4e2d490f3798cdeffca28155de286d51e65ce",
+    "safe_system_action.sh": "5bc965d494e6612ae02488f35d58ba960ee1c401e60c5d118f9c6b76a89118d8",
+    "tmux_background_output.py": "b9b29f8340effaf96bf21cf1928b5229ab111b6ca11d2ff4a6f86f42b5682669"
+  },
+  "license": "MIT",
+  "schema": 1,
+  "source_repository": "https://github.com/mikaeltorni/linux_installation_scripts_functions",
+  "source_revision": "sha256:f642d1ee39363b7734dabdf3f6dcb1647b0a7235e02686b07a488b30262fdb47"
+}

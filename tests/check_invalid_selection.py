@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as directory:
         result = subprocess.run(['bash', str(root/'install.sh'), *arguments],
                                 env=environment, capture_output=True, text=True, timeout=20)
         assert result.returncode != 0, (arguments, result.stdout, result.stderr)
-        assert 'Unknown component' in result.stderr, (arguments, result.stderr)
+        assert any(message in result.stderr for message in ('malformed component identifier:', 'unknown or duplicate component:')), (arguments, result.stderr)
         assert effects.read_text() == '', (arguments, effects.read_text())
         assert sentinel.read_text() == 'existing user extension\n', arguments
         assert sorted(path.name for path in target.iterdir()) == ['extension.js'], arguments
