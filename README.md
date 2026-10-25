@@ -30,10 +30,9 @@ The standalone command above installs directly from this checkout. It does not f
 
 The optional [installation_scripts](https://github.com/mikaeltorni/installation_scripts) bundle clones and runs this installer
 as its own selectable repository; `linux_hotkey_setup` does not configure it.
-Bundle/menu modes (commands without `--standalone`) use
-[`linux_installation_scripts_functions`](https://github.com/mikaeltorni/linux_installation_scripts_functions), resolving a sibling checkout or cloning
-it using the current Git credentials. That framework is currently private;
-use `--standalone` to install from this checkout without framework access.
+Bundle/menu modes use the included MIT `.installer-support/` package.
+They work without a sibling framework checkout or GitHub credentials.
+`--standalone` retains the direct extension installer.
 
 See the full cross-repository map in
 [installation_scripts/DEPENDENCIES.md](https://github.com/mikaeltorni/installation_scripts/blob/master/DEPENDENCIES.md).
@@ -94,8 +93,8 @@ Use `bash install.sh --standalone --help` for usage.
 
 ### Bundle and component-menu installation
 
-With access to the shared framework, omit `--standalone` to use its component
-menu and selection/configuration controls. The core is installed when applying
+Omit `--standalone` to use the included component menu and
+selection/configuration controls. The core is installed when applying
 a selection, including an empty selection; queries and uninstall never deploy
 or enable the extension. The legacy positional accelerator installs defaults:
 
@@ -184,9 +183,8 @@ requires `glib-compile-schemas` (Ubuntu package `libglib2.0-bin`) and builds the
 toolchain and a C linker (Ubuntu package `build-essential`), or Docker/Podman
 for the container build fallback. Ubuntu 24.04's
 distribution Cargo 1.75 cannot read the checked-in lockfile; use a current
-toolchain through rustup instead. When the shared framework is not checked out as a
-sibling, bundle/menu modes require Git credentials for
-`linux_installation_scripts_functions`; `--standalone` bypasses it entirely.
+toolchain through rustup instead. The component menu resolves its included support package offline;
+`--standalone` also remains available.
 
 GSettings accelerator changes apply live. If edited extension JavaScript needs
 a Shell reload, install the automation tool if missing and use GNOME's in-place
@@ -433,4 +431,62 @@ before deployment; JSON export preserves earlier redirected output.
 python3 tests/check_invalid_selection.py
 python3 tests/check_export_stream.py
 bash tests/run_tests.sh
+```
+
+## Installer lifecycle
+
+Run these commands from this checkout. The component IDs printed by discovery
+are the same IDs used by the terminal menu and programmatic actions.
+
+| Command | Behavior |
+| --- | --- |
+| `bash install.sh` | Open component selection on a terminal; use the default/config selection otherwise. |
+| `bash install.sh --help` | Show accepted options (`-h` is equivalent). |
+| `bash install.sh --list-components` | Print component IDs, labels and defaults. |
+| `bash install.sh --default` | Apply default-on components. |
+| `bash install.sh --all` | Apply every component. |
+| `bash install.sh --select ID,...` | Apply exactly the named components. |
+| `bash install.sh --reconfigure ID,...` | Reapply those components through the same install operations. |
+| `bash install.sh --uninstall ID,...` | Run the selected removal operations. |
+| `bash install.sh --detect` | Print `ID<TAB>installed` or `ID<TAB>absent`. |
+| `bash install.sh --export-selection` | Print selection JSON without applying it. |
+
+The shared interface also accepts `--config NAME` (an installation JSON name
+or path) and `--auth` (explicit permission for authenticated component actions).
+`--config=NAME`, `--select=ID,...`, `--reconfigure=ID,...`,
+`--uninstall=ID,...` and `--configure-component=ID` are equivalent forms.
+Advanced discovery is available through `--list-configurable-components`,
+`--list-select-configure-components` and `--list-component-config-values`;
+`--configure-component ID` opens an available nested screen. Atomic owners
+return empty advanced listings and reject unavailable nested configuration.
+
+Explicit `--select ""` selects no optional components; a defined mandatory core
+or installation preflight still runs. `--uninstall ""` is a no-op. Unknown or
+duplicate IDs, missing operands and conflicting modes reject before component
+installation/removal. Help, discovery, detection and export perform no installation.
+Cancelling the component menu performs no install/removal. Configuration screens
+may save their own settings when explicitly accepted.
+
+The shared terminal screen uses arrows to move, Space to toggle, Enter to
+apply and `q`/Escape to cancel; installed components support `u` for removal.
+A right-arrow detail action appears where the owner provides configuration.
+Removal-only selections skip core installation.
+
+The licensed `.installer-support/` package is generated by
+`linux_installation_scripts_functions`; `manifest.json` records provenance and
+SHA-256 hashes, and `LICENSE.md` retains the MIT grant. It is a shared library
+subset, not an application checkout. The default bootstrap requires no private
+download or sibling repository. Explicit `ISC_COMPONENT_LIB_DIR` /
+`ISC_FUNCTIONS_DIR` overrides remain available for development and the old setup
+chain. Regenerate support from its owner rather than editing copies. Bash and
+Python 3 are needed for this library; project build/runtime requirements above
+still apply.
+
+For example, inspect IDs first, then use the same ID with either interface:
+
+```bash
+bash install.sh --list-components
+bash install.sh --select keybinding
+bash install.sh --detect
+bash install.sh --uninstall keybinding
 ```
