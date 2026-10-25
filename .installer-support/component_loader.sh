@@ -64,7 +64,7 @@ fi
 # branch/tag, or ISC_FUNCTIONS_RAW for a private mirror.
 ISC_FUNCTIONS_REPO="${ISC_FUNCTIONS_REPO:-linux_installation_scripts_functions}"
 ISC_FUNCTIONS_REF="${ISC_FUNCTIONS_REF:-master}"
-ISC_FUNCTIONS_RAW="${ISC_FUNCTIONS_RAW:-https://raw.githubusercontent.com/mikaeltorni/linux_automatic_window_tiling/master/.installer-support}"
+ISC_FUNCTIONS_RAW="${ISC_FUNCTIONS_RAW:-https://raw.githubusercontent.com/mikaeltorni/${ISC_FUNCTIONS_REPO}/${ISC_FUNCTIONS_REF}}"
 
 # isc_component_lib_dir - echo a directory that contains both component_menu.sh
 # and component_runtime.sh, downloading them into a cache directory when no
