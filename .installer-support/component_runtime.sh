@@ -184,26 +184,20 @@ _isc_clear_receipt() {
   isc_log_debug "cleared install receipt for '$id'"
 }
 
-# Decide whether component id $1 is installed on this machine.
-#
-# Uses the component's detect function (manifest field 4) as the authoritative
-# live result when defined. Falls back to an install receipt only when no custom
-# detector exists, so stale receipts never mask a removed or broken feature.
-#
-# Arguments:
-#   $1 - component id to test.
-#
-# Returns:
-#   0 when the component is installed, 1 otherwise.
+# Classify live installation state without leaking detector diagnostics into query data.
+# Parameters: $1 - converted component identifier. Returns: the detector status, or zero/one for its receipt.
 _isc_is_installed() {
-  local id="$1" detect dir
+  printf 'id=%s\n' "$1" >&2
+  local id="$1" detect dir rc
   detect="$(_isc_field "$id" 4)"
   if [[ -n "$detect" ]] && declare -F "$detect" >/dev/null 2>&1; then
-    "$detect"
-    return $?
+    if "$detect" >&2; then rc=0; else rc=$?; fi
+  else
+    dir="$(_isc_receipt_dir)"
+    if [[ -f "$dir/$id" ]]; then rc=0; else rc=1; fi
   fi
-  dir="$(_isc_receipt_dir)"
-  [[ -f "$dir/$id" ]]
+  printf '%s\n' "$rc" >&2
+  return "$rc"
 }
 
 # Print "id<TAB>installed|absent" for every component, in manifest order.
@@ -672,86 +666,6 @@ _isc_load_menu() {
 
 # Build the CM_* arrays for this single repo and run the submenu.
 #
-# Echoes the selected ids (newline-separated) on stdout and returns 0 when the
-# user accepted, or returns 1 when cancelled / the menu was unavailable.
-_isc_interactive_select() {
-  if ! _isc_load_menu; then
-    isc_log_warn "interactive menu unavailable — caller will fall back to defaults"
-    return 2
-  fi
-  local repo="${ISC_REPO_NAME:-repo}" id def
-  CM_REPOS=("$repo")
-  CM_REPO_LABEL[$repo]="${ISC_REPO_LABEL:-$repo}"
-  CM_REPO_ENABLED[$repo]=1
-  local ids=""
-  while IFS= read -r id; do
-    [[ -z "$id" ]] && continue
-    ids+="$id "
-    CM_COMP_LABEL[$repo|$id]="$(_isc_field "$id" 1)"
-    CM_COMP_SECTION[$repo|$id]="$(_isc_field "$id" 6)"
-    CM_COMP_REQUIRES[$repo|$id]="$(_isc_field "$id" 7)"
-    if [[ -n "$(_isc_field "$id" 8)" ]]; then
-      CM_COMP_CONFIGURE_ELIGIBLE[$repo|$id]=1
-    else
-      CM_COMP_CONFIGURE_ELIGIBLE[$repo|$id]=0
-    fi
-    if [[ "$(_isc_field "$id" 10)" == "select_configure" ]]; then
-      CM_COMP_CONFIGURE_ON_SELECT[$repo|$id]=1
-    else
-      CM_COMP_CONFIGURE_ON_SELECT[$repo|$id]=0
-    fi
-    CM_COMP_CONFIG_VALUE[$repo|$id]=""
-    local status_fn
-    status_fn="$(_isc_field "$id" 9)"
-    if [[ -n "$status_fn" ]] && declare -F "$status_fn" >/dev/null 2>&1; then
-      CM_COMP_CONFIG_VALUE[$repo|$id]="$("$status_fn" 2>/dev/null || true)"
-    fi
-    CM_COMP_UNINSTALL[$repo|$id]=0
-    # Reflect live install state so the menu can show installed/reconfigure
-    # markers and offer uninstall. Already-installed components default to
-    # "leave as-is" (off) so a re-run never silently re-applies them; absent
-    # components default to the manifest's default-on flag.
-    if _isc_is_installed "$id"; then
-      CM_COMP_INSTALLED[$repo|$id]=1
-      CM_COMP_ON[$repo|$id]=0
-    else
-      CM_COMP_INSTALLED[$repo|$id]=0
-      def="$(_isc_field "$id" 2)"
-      [[ "$def" == "on" ]] && CM_COMP_ON[$repo|$id]=1 || CM_COMP_ON[$repo|$id]=0
-    fi
-  done < <(_isc_all_ids)
-  CM_COMP_IDS[$repo]="${ids% }"
-  _isc_menu_configure_callback() {
-    local callback_repo="$1" callback_id="$2" status_fn
-    [[ "$callback_repo" == "$repo" ]] || return 2
-    _isc_configure_component "$callback_id" || return $?
-    status_fn="$(_isc_field "$callback_id" 9)"
-    if [[ -n "$status_fn" ]] && declare -F "$status_fn" >/dev/null 2>&1; then
-      CM_COMP_CONFIG_VALUE[$repo|$callback_id]="$("$status_fn" 2>/dev/null || true)"
-    fi
-  }
-  CM_CONFIGURE_CALLBACK=_isc_menu_configure_callback
-  declare -F cm_reconcile_dependencies >/dev/null 2>&1 && cm_reconcile_dependencies "$repo"
-
-  if cm_single_submenu "$repo"; then
-    isc_log_info "interactive selection accepted for repo '$repo'"
-    ISC_SELECTED_APPLY=""
-    ISC_SELECTED_UNINSTALL=""
-    for id in ${CM_COMP_IDS[$repo]}; do
-      if [[ "${CM_COMP_UNINSTALL[$repo|$id]:-0}" == "1" ]]; then
-        ISC_SELECTED_UNINSTALL+="$id "
-      elif [[ "${CM_COMP_ON[$repo|$id]:-0}" == "1" ]]; then
-        ISC_SELECTED_APPLY+="$id "
-      fi
-    done
-    ISC_SELECTED_APPLY="${ISC_SELECTED_APPLY% }"
-    ISC_SELECTED_UNINSTALL="${ISC_SELECTED_UNINSTALL% }"
-    return 0
-  fi
-  isc_log_info "interactive selection cancelled for repo '$repo'"
-  return 1
-}
-
 ###############################################################################
 # Entry point
 ###############################################################################
@@ -936,6 +850,128 @@ _isc_route_prepared() {
   return 1
 }
 
+
+# Apply already converted configuration and authentication options.
+# Parameters: $1 - config name; $2 - authentication flag. Returns: zero.
+_isc_apply_options() {
+  printf 'config=%s auth=%s\n' "$1" "$2" >&2
+  if [[ -n "$1" ]]; then
+    ISC_CONFIG_NAME="$1"; ISC_CONFIG_EXPLICIT=1
+    export ISC_CONFIG_NAME ISC_CONFIG_EXPLICIT
+  fi
+  if [[ "$2" == 1 ]]; then INSTALLER_AUTH=1; export INSTALLER_AUTH; fi
+  printf '0\n' >&2
+  return 0
+}
+
+# Accept only this standalone repository's menu callback target.
+# Parameters: $1 - converted repository name. Returns: zero or two.
+_isc_validate_menu_repository() {
+  printf 'repository=%s\n' "$1" >&2
+  if [[ "$1" != "${ISC_REPO_NAME:-repo}" ]]; then
+    printf 'ERROR: unknown menu repository: %s\n2\n' "$1" >&2
+    return 2
+  fi
+  printf '0\n' >&2
+  return 0
+}
+
+# Configure a component from the common standalone selection screen.
+# Parameters: $1 - repository; $2 - component. Returns: callback status.
+_isc_menu_configure_callback() {
+  printf 'repository=%s component=%s\n' "$1" "$2" >&2
+  local rc status_fn
+  _isc_validate_menu_repository "$1" || { printf '2\n' >&2; return 2; }
+  _isc_configure_component "$2" || { rc=$?; printf '%s\n' "$rc" >&2; return "$rc"; }
+  status_fn="$(_isc_field "$2" 9)"
+  if [[ -n "$status_fn" ]] && declare -F "$status_fn" >/dev/null 2>&1; then
+    CM_COMP_CONFIG_VALUE[$1|$2]="$("$status_fn" 2>/dev/null || true)"
+  fi
+  printf '0\n' >&2
+  return 0
+}
+
+# Resolve an accepted command or terminal selection without deploying its core.
+# Parameters: $1 - converted install selector; remaining - converted IDs.
+# Returns: zero with ISC_PLAN_ACTION and ready apply/uninstall arrays, or an error status.
+_isc_plan_selection() {
+  printf 'mode=%s ids=%s\n' "$1" "${*:2}" >&2
+  local mode="$1" repo="${ISC_REPO_NAME:-repo}" id rc
+  shift
+  ISC_PLAN_APPLY_IDS=(); ISC_PLAN_UNINSTALL_IDS=(); ISC_PLAN_ACTION=install
+  _isc_validate_ids "$@" || { printf '2\n' >&2; return 2; }
+  case "$mode" in
+    select) ISC_PLAN_APPLY_IDS=("$@") ;;
+    default|all)
+      _isc_resolve_derived_ids "$mode"
+      ISC_PLAN_APPLY_IDS=("${_ISC_DERIVED_IDS[@]}")
+      ;;
+    "")
+      _isc_prepare_selection_state
+      if _isc_load_config_module; then isc_bootstrap_selection config_active; fi
+      if [[ -t 0 && -t 1 ]]; then
+        if _isc_load_menu; then
+          CM_CONFIGURE_CALLBACK=_isc_menu_configure_callback
+          if cm_single_submenu "$repo"; then rc=0; else rc=$?; fi
+          if (( rc != 0 )); then
+            ISC_PLAN_ACTION=cancel
+            msg "Selection cancelled — nothing changed."
+            printf '0 action=cancel\n' >&2
+            return 0
+          fi
+        else
+          msg "Interactive menu unavailable — using installation config selection."
+        fi
+        if _isc_load_config_module; then isc_config_prompt_save standalone "$repo"; fi
+      fi
+      # Component IDs here are serialized manifest/menu metadata, not raw CLI operands.
+      for id in ${CM_COMP_IDS[$repo]:-}; do
+        if [[ "${CM_COMP_UNINSTALL[$repo|$id]:-0}" == 1 ]]; then
+          ISC_PLAN_UNINSTALL_IDS+=("$id")
+        elif [[ "${CM_COMP_ON[$repo|$id]:-0}" == 1 ]]; then
+          ISC_PLAN_APPLY_IDS+=("$id")
+        fi
+      done
+      ;;
+  esac
+  _isc_validate_ids "${ISC_PLAN_APPLY_IDS[@]}" || { printf '2\n' >&2; return 2; }
+  _isc_validate_ids "${ISC_PLAN_UNINSTALL_IDS[@]}" || { printf '2\n' >&2; return 2; }
+  if (( ${#ISC_PLAN_UNINSTALL_IDS[@]} && ${#ISC_PLAN_APPLY_IDS[@]} == 0 )); then ISC_PLAN_ACTION=remove; fi
+  ISC_SELECTED_APPLY="${ISC_PLAN_APPLY_IDS[*]}"
+  ISC_SELECTED_UNINSTALL="${ISC_PLAN_UNINSTALL_IDS[*]}"
+  printf 'action=%s apply=%s uninstall=%s status=0\n' "$ISC_PLAN_ACTION" "${ISC_PLAN_APPLY_IDS[*]}" "${ISC_PLAN_UNINSTALL_IDS[*]}" >&2
+  return 0
+}
+
+# Plan a request already parsed by isc_route_readonly_args before an owner's bare core call.
+# Parameters: none. Returns: zero with a ready plan or an error status.
+isc_plan_install() {
+  printf 'parameters=none\n' >&2
+  local rc
+  _isc_apply_options "$ISC_ARGUMENT_CONFIG" "$ISC_ARGUMENT_AUTH"
+  _isc_plan_selection "$ISC_ARGUMENT_MODE" "${ISC_ARGUMENT_IDS[@]}"; rc=$?
+  printf '%s\n' "$rc" >&2
+  return "$rc"
+}
+
+# Execute a prepared terminal or command plan through common component operations.
+# Parameters: $1 - converted selection origin. Returns: combined operation status.
+_isc_apply_plan() {
+  printf 'origin=%s\n' "$1" >&2
+  local failure=0
+  _isc_validate_ids "${ISC_PLAN_APPLY_IDS[@]}" || { printf '2\n' >&2; return 2; }
+  _isc_validate_ids "${ISC_PLAN_UNINSTALL_IDS[@]}" || { printf '2\n' >&2; return 2; }
+  if [[ "$ISC_PLAN_ACTION" == cancel ]]; then printf '0\n' >&2; return 0; fi
+  if (( ${#ISC_PLAN_UNINSTALL_IDS[@]} )); then
+    _isc_uninstall_components "${ISC_PLAN_UNINSTALL_IDS[@]}" || failure=1
+  fi
+  if [[ "$ISC_PLAN_ACTION" == install ]]; then
+    _isc_install_components "$1" "${ISC_PLAN_APPLY_IDS[@]}" || failure=1
+  fi
+  printf '%s\n' "$failure" >&2
+  return "$failure"
+}
+
 # Dispatch one completely parsed installer request.
 # Parameters: $@ - raw installer arguments. Returns: selected operation exit status.
 component_main() {
@@ -954,11 +990,7 @@ _isc_apply_request() {
   local mode="$1" origin="$2" config="$3" auth="$4" rc=0
   shift 4
   _isc_validate_ids "$@" || { printf '2\n' >&2; return 2; }
-  if [[ -n "$config" ]]; then
-    ISC_CONFIG_NAME="$config"; ISC_CONFIG_EXPLICIT=1
-    export ISC_CONFIG_NAME ISC_CONFIG_EXPLICIT
-  fi
-  if [[ "$auth" == 1 ]]; then INSTALLER_AUTH=1; export INSTALLER_AUTH; fi
+  _isc_apply_options "$config" "$auth"
   case "$mode" in
     --list-components) _isc_list_components ;;
     --list-configurable-components) _isc_list_configurable_components ;;
@@ -985,95 +1017,10 @@ _isc_apply_request() {
     select)    _isc_install_components "$origin" "$@"; rc=$?; printf '%s\n' "$rc" >&2; return "$rc" ;;
     uninstall) _isc_uninstall_components "$@"; rc=$?; printf '%s\n' "$rc" >&2; return "$rc" ;;
     "")
-      # No mode requested. Use the interactive submenu on a real terminal,
-      # otherwise apply the active installation config (default.json when unset).
-      _isc_prepare_selection_state
-      if _isc_load_config_module; then
-        isc_bootstrap_selection config_active
-      fi
-      if [[ -t 0 && -t 1 ]]; then
-        local rc apply_rc=0 uninstall_rc=0
-        if ! _isc_load_menu; then
-          isc_log_warn "interactive menu unavailable — using config selection"
-          msg "Interactive menu unavailable — using installation config selection."
-        else
-          local repo="${ISC_REPO_NAME:-repo}" id
-          # Configure the selected repository component.
-          # Parameters: $1 - repository; $2 - component. Returns: callback exit status.
-          _isc_menu_configure_callback() {
-            printf 'repository=%s component=%s\n' "$1" "$2" >&2
-            local callback_repo="$1" callback_id="$2" status_fn
-            [[ "$callback_repo" == "$repo" ]] || { printf '2\n' >&2; return 2; }
-            _isc_configure_component "$callback_id" || { local callback_rc=$?; printf '%s\n' "$callback_rc" >&2; return "$callback_rc"; }
-            status_fn="$(_isc_field "$callback_id" 9)"
-            if [[ -n "$status_fn" ]] && declare -F "$status_fn" >/dev/null 2>&1; then
-              CM_COMP_CONFIG_VALUE[$repo|$callback_id]="$("$status_fn" 2>/dev/null || true)"
-            fi
-            printf '0\n' >&2
-            return 0
-          }
-          CM_CONFIGURE_CALLBACK=_isc_menu_configure_callback
-          if cm_single_submenu "$repo"; then rc=0; else rc=$?; fi
-          if (( rc != 0 )); then
-            isc_log_info "selection cancelled — nothing changed"
-            msg "Selection cancelled — nothing changed."
-            printf '0\n' >&2
-            return 0
-          fi
-        fi
-        if _isc_load_config_module; then
-          isc_config_prompt_save "standalone" "${ISC_REPO_NAME:-repo}"
-        fi
-        local -a apply_ids=() uninstall_ids=()
-        for id in ${CM_COMP_IDS[$repo]:-}; do
-          if [[ "${CM_COMP_UNINSTALL[$repo|$id]:-0}" == "1" ]]; then
-            uninstall_ids+=("$id")
-          elif [[ "${CM_COMP_ON[$repo|$id]:-0}" == "1" ]]; then
-            apply_ids+=("$id")
-          fi
-        done
-        ISC_SELECTED_APPLY="${apply_ids[*]}"
-        ISC_SELECTED_UNINSTALL="${uninstall_ids[*]}"
-        if (( ${#uninstall_ids[@]} )); then
-          _isc_uninstall_components "${uninstall_ids[@]}" || uninstall_rc=$?
-        fi
-        if (( ${#apply_ids[@]} )); then
-          _isc_install_components "$origin" "${apply_ids[@]}" || apply_rc=$?
-        elif (( ${#uninstall_ids[@]} == 0 )); then
-          # A blank selection is still an install: the operation runs the
-          # repository's ISC_CORE hook, so
-          # deselecting every row in the menu yields a core-only install rather
-          # than a repo that was never installed at all.
-          _isc_install_components "$origin" || apply_rc=$?
-        fi
-        (( apply_rc != 0 || uninstall_rc != 0 )) && { printf '1\n' >&2; return 1; }
-        printf '0\n' >&2
-        return 0
-      else
-        isc_log_info "no TTY — applying installation config selection"
-        local repo="${ISC_REPO_NAME:-repo}" id
-        local -a apply_ids=() uninstall_ids=()
-        for id in ${CM_COMP_IDS[$repo]:-}; do
-          if [[ "${CM_COMP_UNINSTALL[$repo|$id]:-0}" == "1" ]]; then
-            uninstall_ids+=("$id")
-          elif [[ "${CM_COMP_ON[$repo|$id]:-0}" == "1" ]]; then
-            apply_ids+=("$id")
-          fi
-        done
-        if (( ${#uninstall_ids[@]} )); then
-          _isc_uninstall_components "${uninstall_ids[@]}" || { rc=$?; printf '%s\n' "$rc" >&2; return "$rc"; }
-        fi
-        if (( ${#apply_ids[@]} )); then
-          _isc_install_components "$origin" "${apply_ids[@]}"; rc=$?; printf '%s\n' "$rc" >&2; return "$rc"
-        fi
-        if (( ${#uninstall_ids[@]} )); then
-          msg "[$ISC_REPO_NAME] No components selected — nothing to do."
-          printf '0\n' >&2
-          return 0
-        fi
-        # Blank config selection: still install the core (see the TTY branch).
-        _isc_install_components "$origin"; rc=$?; printf '%s\n' "$rc" >&2; return "$rc"
-      fi
+      _isc_plan_selection "$mode" "$@" || { rc=$?; printf '%s\n' "$rc" >&2; return "$rc"; }
+      _isc_apply_plan "$origin"; rc=$?
+      printf '%s\n' "$rc" >&2
+      return "$rc"
       ;;
   esac
   rc=$?

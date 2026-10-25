@@ -5,7 +5,7 @@
     "component_loader.sh": "0d21957938ec3ddfe487d7bea95c0227bf0fc7a6774b708041f82f75b1848fff",
     "component_logging.sh": "ef28e47e899832537ea23ba31c36e1b30d8e48f4609691c7592d7a80cfab6d41",
     "component_menu.sh": "5e6958b9f1e42a56097c0460109849342e619ade3e352d27e966648e10b1257e",
-    "component_runtime.sh": "e702f8a112520750c4e60980a8956f2f07820c9fdb656261d4b52cc49087ead9",
+    "component_runtime.sh": "21ce623c584760d394f16a16c808071686aa7d4fa8a4e563f812ffc715a78a31",
     "hotkey_capture.py": "37017cc6433410718e921cb2b9eb550220857cc6b79c305dde246a09c67e2adb",
     "hotkey_capture.sh": "bd8e301eb2557e0f910d5e5037dcb95df0947c00ebf795b3e69fdf5f7fe56ef4",
     "installation_config.py": "d1ad54e02b5182d7fc57166579573a54e0852f624f338501339ee2c0780a9f2c",
@@ -21,5 +21,5 @@
   "license": "MIT",
   "schema": 1,
   "source_repository": "https://github.com/mikaeltorni/linux_installation_scripts_functions",
-  "source_revision": "sha256:f642d1ee39363b7734dabdf3f6dcb1647b0a7235e02686b07a488b30262fdb47"
+  "source_revision": "sha256:6aad1aeab9eb1af208441d97f90b8f1cb2d7c8f1fc5c1dec748ab0c651c5dc07"
 }
