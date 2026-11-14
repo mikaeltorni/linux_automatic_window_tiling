@@ -296,7 +296,7 @@ python3 tests/check_vm_tiling.py --expect-unchanged --key ctrl+shift+t --windows
 
 ## Contributing
 
-This is a private repository, so contribution access is limited to authorized collaborators. Before changing installed behavior, read [AGENTS.md](AGENTS.md) and follow the development and verification steps in this README.
+Before changing installed behavior, read [AGENTS.md](AGENTS.md) and follow the development and verification steps in this README.
 
 ## Integrating GNOME Shell Window Tiling
 
@@ -412,8 +412,7 @@ The existing component interface and options documented above remain available;
 `ISC_FUNCTIONS_DIR` is an explicit support override. Run
 `python3 tests/check_standalone_public.py` to check discovery and selection JSON
 with downloads blocked. Runtime extension source is unchanged by this installer
-support migration. The standalone support is available on the public default branch. Follow-up
-fixes from the final local audit remain local until explicitly published.
+support migration. The standalone support is available on the public default branch.
 
 ## Ubuntu VM installer verification
 
