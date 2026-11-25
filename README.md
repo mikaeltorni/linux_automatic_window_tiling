@@ -1,10 +1,8 @@
-> Part of [mt_stack](https://github.com/mikaeltorni/mt_stack), a Linux setup stack of independently installable projects.
-
 # Linux Automatic Window Tiling for GNOME Shell
 
-[![Last commit: 2026-10-20](docs/badges/last-commit.svg)](https://github.com/mikaeltorni/linux_automatic_window_tiling/commits/master)
-[![Commit activity: 46 commits in 30 days](docs/badges/commit-activity.svg)](https://github.com/mikaeltorni/linux_automatic_window_tiling/graphs/commit-activity)
-[![Open issues: 0](docs/badges/issues.svg)](https://github.com/mikaeltorni/linux_automatic_window_tiling/issues)
+[![Last commit](https://img.shields.io/github/last-commit/mikaeltorni/linux_automatic_window_tiling)](https://github.com/mikaeltorni/linux_automatic_window_tiling/commits/master)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/mikaeltorni/linux_automatic_window_tiling)](https://github.com/mikaeltorni/linux_automatic_window_tiling/graphs/commit-activity)
+[![Issues](https://img.shields.io/github/issues/mikaeltorni/linux_automatic_window_tiling)](https://github.com/mikaeltorni/linux_automatic_window_tiling/issues)
 
 Linux Automatic Window Tiling is a GNOME Shell extension for shortcut-driven tiling of same-application windows or all eligible windows.
 
@@ -14,9 +12,10 @@ By default, `Super+T` tiles windows from the focused app and `Ctrl+Shift+T` tile
 
 ## Quick start
 
-From this checkout, install the extension without the private shared installer framework:
+From this checkout, list the available components, then install the extension:
 
 ```bash
+bash install.sh --list-components
 bash install.sh --standalone
 ```
 
@@ -28,14 +27,12 @@ Focus an app window and press `Super+T` to tile that app's windows. Press `Ctrl+
 
 The standalone command above installs directly from this checkout. It does not fetch setup repositories or require GitHub credentials. It needs the build and desktop tools listed below; obtaining a toolchain or container image can require network access.
 
-The optional [installation_scripts](https://github.com/mikaeltorni/installation_scripts) bundle clones and runs this installer
-as its own selectable repository; `linux_hotkey_setup` does not configure it.
-Bundle/menu modes use the included MIT `.installer-support/` package.
-They work without a sibling framework checkout or GitHub credentials.
-`--standalone` retains the direct extension installer.
-
-See the full cross-repository map in
-[installation_scripts/DEPENDENCIES.md](https://github.com/mikaeltorni/installation_scripts/blob/master/DEPENDENCIES.md).
+Component-menu installs use the included, MIT-licensed `.installer-support/`
+package. The extension owns its own tiling shortcuts. The separate
+[Ubuntu Hotkeys Setup](https://github.com/mikaeltorni/linux_hotkey_setup) installer
+manages workspace navigation and screenshot shortcuts. For window counts and
+system metrics, see [Taskbar Window Count](https://github.com/mikaeltorni/linux_taskbar_window_count)
+and [Taskbar Monitor](https://github.com/mikaeltorni/linux_taskbar_monitor).
 
 ## Features of GNOME Shell Window Tiling
 
